@@ -1,0 +1,33 @@
+{
+  "name": "dharma-nails-spa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dharma Nails Spa - Agenda de citas en línea con confirmación por WhatsApp",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "bcryptjs": "^2.4.3",
+    "date-fns": "^3.6.0",
+    "echarts": "^6.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.6.0",
+    "next": "14.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2",
+    "mongodb-memory-server": "^10.1.2",
+    "playwright": "^1.62.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13"
+  }
+}

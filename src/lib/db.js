@@ -1,0 +1,88 @@
+import mongoose from "mongoose";
+import path from "path";
+
+// Conexión a MongoDB con caché global (evita múltiples conexiones en dev/serverless).
+// Si no hay MONGODB_URI en desarrollo, arranca un MongoDB en memoria automáticamente.
+
+let cached = global._mongoose;
+if (!cached) {
+  cached = global._mongoose = { conn: null, promise: null };
+}
+
+async function resolveUri() {
+  if (process.env.MONGODB_URI && process.env.MONGODB_URI.trim() !== "") {
+    return process.env.MONGODB_URI.trim();
+  }
+
+  // Sin URI: usamos MongoDB en memoria (solo desarrollo/pruebas).
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "MONGODB_URI es obligatoria en producción. Configúrala en las variables de entorno."
+    );
+  }
+
+  if (!global._mongoMemory) {
+    const { MongoMemoryServer } = await import("mongodb-memory-server");
+    const { mkdirSync, rmSync, existsSync } = await import("fs");
+    const dbPath = path.join(process.cwd(), ".mongo-memory");
+    mkdirSync(dbPath, { recursive: true });
+    // Eliminar lock file si quedó de un cierre forzado
+    const lockFile = path.join(dbPath, "mongod.lock");
+    if (existsSync(lockFile)) rmSync(lockFile);
+    const mongod = await MongoMemoryServer.create({
+      instance: {
+        dbName: "dharmanailsspa",
+        storageEngine: "wiredTiger",
+        dbPath,
+      },
+    });
+    global._mongoMemory = mongod;
+    console.log("🧪 MongoDB en memoria iniciado (desarrollo).");
+  }
+  return global._mongoMemory.getUri();
+}
+
+// Promesa única de seed por proceso: evita que requests concurrentes ejecuten
+// el seed varias veces al arrancar con la base vacía (generaba barberos duplicados).
+let seedPromise = null;
+
+export async function dbConnect() {
+  if (!cached.conn) {
+    if (!cached.promise) {
+      cached.promise = (async () => {
+        const uri = await resolveUri();
+        return mongoose.connect(uri, {
+          bufferCommands: false,
+          dbName: "dharmanailsspa",
+        });
+      })();
+    }
+
+    try {
+      cached.conn = await cached.promise;
+    } catch (e) {
+      cached.promise = null;
+      throw e;
+    }
+
+    // Auto-seed: SOLO al crear la conexión (una vez por proceso) y en
+    // desarrollo/pruebas. Antes se corría en cada dbConnect() y requests
+    // concurrentes sembraban barberos duplicados.
+    const seedPermitido =
+      process.env.NODE_ENV !== "production" && process.env.ALLOW_SEED !== "false";
+    if (seedPermitido && !seedPromise) {
+      seedPromise = (async () => {
+        const { seedIfEmpty } = await import("./seed");
+        return seedIfEmpty();
+      })().catch((e) => {
+        seedPromise = null; // permitir reintentar en la próxima conexión
+        console.error("Error en el seed automático:", e.message);
+      });
+    }
+    if (seedPromise) await seedPromise;
+  }
+
+  return cached.conn;
+}
+
+export default dbConnect;

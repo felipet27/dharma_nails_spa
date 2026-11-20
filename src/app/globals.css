@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Neutros de Dharma Nails Spa, tomados del logo (verde muy oscuro y el
+     topo cálido del fondo). Los colores de marca (--brand, --brand-deep,
+     --stripe, ...) se inyectan desde src/lib/brands.js. */
+  --tinta: #13241d;   /* texto principal y fondo del header (verde casi negro) */
+  --hueso: #faf7f2;   /* fondo principal; texto sobre oscuro */
+  --crema: #efe8df;   /* fondos de sección y tarjetas (topo claro) */
+  --pizarra: #5d6862; /* texto secundario */
+  --linea: #ddd4c8;   /* bordes, divisores, inputs */
+  --whatsapp: #25d366;
+  --whatsapp-deep: #128c4a; /* botones de WhatsApp pequeños (texto blanco) */
+  --cobre: #c8954a;          /* dorado del logo */
+  --cobre-profundo: #9a6332; /* dorado oscuro para texto sobre claro */
+  --azul-acero: #8fae9a;     /* verde salvia (gráficas) */
+
+  /* Mismos neutros en canales RGB para Tailwind (bg-tinta/80, etc.) */
+  --tinta-rgb: 19 36 29;
+  --hueso-rgb: 250 247 242;
+  --crema-rgb: 239 232 223;
+  --pizarra-rgb: 93 104 98;
+  --linea-rgb: 221 212 200;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--hueso);
+  color: var(--tinta);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
+/* Elimina el flash azul en iOS al tocar, y el delay de 300ms */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Evita que iOS haga zoom al enfocar inputs */
+input, select, textarea {
+  font-size: max(16px, 1em);
+}
+
+/* Animación de entrada para tarjetas (#4) */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  opacity: 0;
+  animation: fade-up 0.5s ease-out forwards;
+}
+
+/* Oculta las barras de scroll manteniendo el desplazamiento (usada en las barras de tabs) */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Touch targets mínimos en nav del header */
+header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Franja degradada de la marca (verde → salvia → dorado) */
+.brand-stripe {
+  background: var(--stripe);
+}
+
+/* Transición suave de colores mientras se cambia de marca. BrandProvider pone
+   la clase un instante en <html>; con movimiento reducido no se anima. */
+@media (prefers-reduced-motion: no-preference) {
+  html.cambiando-marca *,
+  html.cambiando-marca *::before,
+  html.cambiando-marca *::after {
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px];
+  }
+  .btn-primary {
+    @apply btn bg-brand text-on-brand hover:bg-brand-deep;
+  }
+  /* Dorado del logo: para llamados a la acción sobre fondos oscuros */
+  .btn-accent {
+    @apply btn bg-brand-accent text-tinta hover:brightness-110;
+  }
+  .btn-blue {
+    @apply btn bg-brand-deep text-on-brand hover:bg-tinta;
+  }
+  .btn-dark {
+    @apply btn bg-tinta text-hueso hover:bg-black;
+  }
+  .btn-outline {
+    @apply btn border-2 border-tinta text-tinta hover:bg-tinta hover:text-hueso;
+  }
+  .btn-wa {
+    @apply btn bg-whatsapp-deep text-white hover:brightness-90;
+  }
+  .card {
+    @apply rounded-2xl bg-white shadow-card border border-black/5;
+  }
+  .input {
+    @apply w-full rounded-lg border border-linea bg-white px-3 py-2.5 outline-none focus:border-brand-deep focus:ring-1 focus:ring-brand-deep;
+  }
+  .label {
+    @apply block text-sm font-semibold text-tinta mb-1;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+}

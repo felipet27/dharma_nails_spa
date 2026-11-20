@@ -1,0 +1,125 @@
+import Cita from "@/models/Cita";
+import Barbero from "@/models/Barbero";
+import { ESTADO_CITA, ROLES } from "@/lib/constants";
+import { enviarPush } from "@/lib/push";
+import { normalizarCelular } from "@/lib/whatsapp";
+import { obtenerMarca } from "@/lib/brands";
+import {
+  fechaLocalHoy,
+  hhmmAMin,
+  minutosActualesColombia,
+  formatearHora12,
+} from "@/lib/disponibilidad";
+
+// Minutos de antelación con que se avisa al barbero de una cita sin confirmar.
+export const MIN_ANTELACION_AVISO = 15;
+
+// Busca las citas de HOY que siguen SIN CONFIRMAR y cuya hora de inicio está
+// dentro de los próximos MIN_ANTELACION_AVISO minutos, y envía un push al
+// barbero dueño. Marcamos el flag aunque no haya suscripción activa para no
+// reintentar en bucle. Nunca lanza: los errores quedan en el log.
+//
+// Se usa desde el cron (/api/cron/recordatorios) y de forma oportunista desde
+// GET /api/citas, para que el aviso funcione aunque NO haya cron externo
+// configurado mientras el barbero tenga su panel abierto.
+export async function recordarCitasSinConfirmar({ barberoId = null } = {}) {
+  try {
+    const hoy = fechaLocalHoy();
+    const ahoraMin = minutosActualesColombia();
+
+    const filtro = {
+      estado: ESTADO_CITA.SOLICITADA,
+      fecha: hoy,
+      recordatorioEnviado: { $ne: true },
+    };
+    if (barberoId) filtro.barbero = barberoId;
+
+    const candidatas = await Cita.find(filtro).lean();
+
+    // Se avisa cuando faltan entre 0 y MIN_ANTELACION_AVISO minutos para la cita.
+    const porAvisar = candidatas.filter((c) => {
+      const faltan = hhmmAMin(c.horaInicio) - ahoraMin;
+      return faltan > 0 && faltan <= MIN_ANTELACION_AVISO;
+    });
+
+    let notificadas = 0;
+    for (const cita of porAvisar) {
+      const plan = cita.planSnapshot?.nombre || cita.plan;
+      await enviarPush(
+        { ownerRole: ROLES.BARBERO, ownerId: cita.barbero },
+        {
+          title: "Cita sin confirmar",
+          body: `${cita.clienteNombre} · ${plan} · hoy a las ${formatearHora12(cita.horaInicio)}. Empieza en unos ${MIN_ANTELACION_AVISO} min y sigue sin confirmar.`,
+          url: "/barbero/panel",
+          tag: `recordatorio-${cita._id}`,
+        }
+      );
+      await Cita.updateOne({ _id: cita._id }, { $set: { recordatorioEnviado: true } });
+      notificadas++;
+    }
+
+    return { revisadas: candidatas.length, notificadas };
+  } catch (e) {
+    console.error("recordarCitasSinConfirmar falló:", e.message);
+    return { revisadas: 0, notificadas: 0 };
+  }
+}
+
+// Recordatorio al CLIENTE el día de su cita. Citas confirmadas de hoy, con
+// celular, aún no recordadas. Se le avisa una sola vez, a partir de la hora en
+// que abre el barbero ese día. Igual que arriba: flag siempre puesto para no
+// repetir, y nunca lanza.
+//
+// Se usa desde el cron y de forma oportunista desde GET /api/citas/consulta
+// (cuando el cliente abre Mis Citas el día de su cita, si el cron no corrió).
+export async function recordarClientesDelDia({ barberoId = null, celular = null } = {}) {
+  try {
+    const hoy = fechaLocalHoy();
+    const ahoraMin = minutosActualesColombia();
+
+    const filtro = {
+      estado: ESTADO_CITA.CONFIRMADA,
+      fecha: hoy,
+      clienteCelular: { $nin: [null, ""] },
+      recordatorioClienteEnviado: { $ne: true },
+    };
+    if (barberoId) filtro.barbero = barberoId;
+    if (celular) filtro.clienteCelular = normalizarCelular(celular);
+
+    const citasHoy = await Cita.find(filtro).lean();
+    if (citasHoy.length === 0) return { revisadas: 0, recordadas: 0 };
+
+    const barberoIds = [...new Set(citasHoy.map((c) => String(c.barbero)))];
+    const barberos = await Barbero.find({ _id: { $in: barberoIds } })
+      .select("nombre local horario marca")
+      .lean();
+    const mapaBarbero = new Map(barberos.map((b) => [String(b._id), b]));
+
+    let recordadas = 0;
+    for (const cita of citasHoy) {
+      const barbero = mapaBarbero.get(String(cita.barbero));
+      const apertura = barbero?.horario?.horaInicio || "00:00";
+      // Aún no abre el local (hora de Colombia): esperamos a un próximo ciclo.
+      if (ahoraMin < hhmmAMin(apertura)) continue;
+
+      const t = obtenerMarca(barbero?.marca).textos;
+      const local = barbero?.local || `la ${t.negocio}`;
+      await enviarPush(
+        { ownerRole: "cliente", clienteCelular: normalizarCelular(cita.clienteCelular) },
+        {
+          title: `Recordatorio de tu cita ${t.emoji}`,
+          body: `Hoy tienes cita a las ${formatearHora12(cita.horaInicio)} con ${barbero?.nombre || `tu ${t.profesional}`} en ${local}.`,
+          url: "/mis-citas",
+          tag: `recordatorio-cliente-${cita._id}`,
+        }
+      );
+      await Cita.updateOne({ _id: cita._id }, { $set: { recordatorioClienteEnviado: true } });
+      recordadas++;
+    }
+
+    return { revisadas: citasHoy.length, recordadas };
+  } catch (e) {
+    console.error("recordarClientesDelDia falló:", e.message);
+    return { revisadas: 0, recordadas: 0 };
+  }
+}

@@ -1,0 +1,376 @@
+"use client";
+
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Header from "@/components/Header";
+import EstadoBadge from "@/components/EstadoBadge";
+import EditorPlanes from "@/components/admin/EditorPlanes";
+import EditorInfoBarbero from "@/components/admin/EditorInfoBarbero";
+import CrearBarberoModal from "@/components/admin/CrearBarberoModal";
+import { MARCA_DEFAULT, obtenerMarca } from "@/lib/brands";
+import { useBrand } from "@/components/BrandProvider";
+import ControlSuscripciones from "@/components/admin/ControlSuscripciones";
+import ActivarNotificaciones from "@/components/ActivarNotificaciones";
+import { useDialog } from "@/components/DialogProvider";
+
+const FILTROS = [
+  { key: "pendiente", label: "Pendientes" },
+  { key: "activo", label: "Activos" },
+  { key: "inactivo", label: "Inactivos" },
+  { key: "rechazado", label: "Rechazados" },
+  { key: "", label: "Todos" },
+];
+
+export default function AdminPanelPage() {
+  const router = useRouter();
+  const { id: marcaActiva } = useBrand();
+  const { confirmar } = useDialog();
+  const [sesion, setSesion] = useState(undefined);
+  const [filtro, setFiltro] = useState("pendiente");
+  const [barberos, setBarberos] = useState([]);
+  const [todosBarberos, setTodosBarberos] = useState([]);
+  const [creandoBarbero, setCreandoBarbero] = useState(false); // CrearBarberoModal
+  const [editando, setEditando]       = useState(null); // EditorPlanes
+  const [editandoInfo, setEditandoInfo] = useState(null); // EditorInfoBarbero
+  const [eliminando, setEliminando]   = useState(null); // barbero a eliminar (modal confirmación)
+  const [borrando, setBorrando]       = useState(false);
+  const [vista, setVista]             = useState("barberos"); // "barberos" | "solicitudes" | "control"
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [nuevasSolicitudes, setNuevasSolicitudes] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.session || d.session.role !== "admin") { router.replace(`/admin/login`); setSesion(null); }
+        else setSesion(d.session);
+      });
+  }, [router]);
+
+  const cargar = useCallback(() => {
+    const q = filtro ? `?estado=${filtro}` : "";
+    fetch(`/api/admin/barberos${q}`).then((r) => r.json()).then((d) => setBarberos(d.barberos || []));
+    fetch("/api/admin/barberos").then((r) => r.json()).then((d) => setTodosBarberos(d.barberos || []));
+  }, [filtro]);
+
+  const porCobrarCount = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    return todosBarberos.filter((b) => {
+      if (b.estado !== "activo" || !b.suscripcionVence) return false;
+      const vence = new Date(b.suscripcionVence);
+      vence.setHours(0, 0, 0, 0);
+      const diffDias = Math.round((vence.getTime() - hoy.getTime()) / 864e5);
+      return diffDias <= 5;
+    }).length;
+  }, [todosBarberos]);
+
+  useEffect(() => { if (sesion) cargar(); }, [sesion, cargar]);
+
+  const cargarSolicitudes = useCallback(() => {
+    fetch("/api/admin/solicitudes")
+      .then((r) => r.json())
+      .then((d) => { setSolicitudes(d.solicitudes || []); setNuevasSolicitudes(d.nuevas || 0); });
+  }, []);
+
+  // Cargar solicitudes al entrar (para el contador) y al abrir la vista.
+  useEffect(() => { if (sesion) cargarSolicitudes(); }, [sesion, cargarSolicitudes]);
+
+  async function accionSolicitud(id, accion) {
+    if (accion === "eliminar") {
+      const ok = await confirmar({
+        titulo: "Eliminar solicitud",
+        mensaje: "Se borrará esta solicitud de forma permanente.",
+        confirmarLabel: "Eliminar",
+        peligro: true,
+      });
+      if (!ok) return;
+      const res = await fetch(`/api/admin/solicitudes/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); return alert(d.error || "Error"); }
+    } else {
+      const res = await fetch(`/api/admin/solicitudes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion }),
+      });
+      if (!res.ok) { const d = await res.json(); return alert(d.error || "Error"); }
+    }
+    cargarSolicitudes();
+  }
+
+  const CONFIRMAR = {
+    rechazar: {
+      titulo: "Rechazar negocio",
+      mensaje: "¿Rechazar la solicitud de este negocio?",
+      confirmarLabel: "Rechazar",
+    },
+    desactivar: {
+      titulo: "Desactivar negocio",
+      mensaje: "No podrá iniciar sesión ni recibir nuevas citas.",
+      confirmarLabel: "Desactivar",
+    },
+  };
+
+  async function accion(id, accion) {
+    if (CONFIRMAR[accion]) {
+      const ok = await confirmar({ ...CONFIRMAR[accion], peligro: true });
+      if (!ok) return;
+    }
+    const res = await fetch(`/api/admin/barberos/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion }),
+    });
+    const d = await res.json();
+    if (!res.ok) return alert(d.error);
+    cargar();
+  }
+
+  async function eliminarBarbero() {
+    if (!eliminando) return;
+    setBorrando(true);
+    const res = await fetch(`/api/admin/barberos/${eliminando.id}`, { method: "DELETE" });
+    const d = await res.json();
+    setBorrando(false);
+    if (!res.ok) return alert(d.error || "Error al eliminar");
+    setEliminando(null);
+    cargar();
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/");
+  }
+
+  // Sede precargada al crear un negocio: la del primer negocio de la marca
+  // activa, para no proponerle a un groomer los datos de una barbería.
+  const negocioMismaMarca = barberos.find((b) => (b.marca || MARCA_DEFAULT) === marcaActiva && b.local);
+  const sedeDeLaMarca = negocioMismaMarca
+    ? { local: negocioMismaMarca.local, ciudad: negocioMismaMarca.ciudad, direccion: negocioMismaMarca.direccion }
+    : undefined;
+
+  if (sesion === undefined) return <div className="p-10 text-center text-pizarra">Cargando…</div>;
+  if (!sesion) return null;
+
+  return (
+    <div className="min-h-screen">
+      <Header showBrandSwitcher>
+        <button onClick={logout} className="btn-outline border-white text-white hover:bg-white hover:text-tinta text-sm py-1.5">Salir</button>
+      </Header>
+      <main className="mx-auto max-w-5xl px-4 py-6">
+        <h1 className="font-display text-3xl">Panel de administración</h1>
+
+        <div className="mt-4">
+          <ActivarNotificaciones descripcion="Recibí un aviso apenas alguien te contacte desde la web, aunque tengas la app cerrada." />
+        </div>
+
+        {/* Navegación de vistas */}
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => setVista("barberos")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold ${vista === "barberos" ? "bg-tinta text-white" : "border"}`}>
+            Negocios
+          </button>
+          <button onClick={() => { setVista("solicitudes"); cargarSolicitudes(); }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${vista === "solicitudes" ? "bg-tinta text-white" : "border"}`}>
+            Solicitudes
+            {nuevasSolicitudes > 0 && (
+              <span className="inline-grid place-items-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand text-white text-xs font-bold">
+                {nuevasSolicitudes}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setVista("control")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${vista === "control" ? "bg-tinta text-white" : "border"}`}>
+            Control
+            {porCobrarCount > 0 && (
+              <span className="inline-grid place-items-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs font-bold">
+                {porCobrarCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {vista === "barberos" && (
+        <>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {FILTROS.map((f) => (
+              <button key={f.key} onClick={() => setFiltro(f.key)}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold ${filtro === f.key ? "bg-tinta text-white" : "border"}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreandoBarbero(true)}
+            className="btn-primary py-1.5 px-3.5 text-sm whitespace-nowrap shadow-sm ml-auto flex items-center gap-1.5"
+          >
+            <span className="text-base leading-none font-bold">+</span>
+            <span>Nuevo negocio</span>
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {barberos.length === 0 && <div className="card p-8 text-center text-pizarra">Sin negocios en esta categoría.</div>}
+          {barberos.map((b) => (
+            <div key={b.id} className="card p-4">
+              <div className="flex justify-between items-start gap-2 flex-wrap">
+                <div>
+                  <h3 className="font-display text-lg flex items-center gap-2 flex-wrap">
+                    {b.local}
+                    <span className="badge bg-tinta text-hueso font-body tracking-normal">
+                      <span style={{ color: obtenerMarca(b.marca).colores.brandOnDark }}>Citas</span>
+                      {obtenerMarca(b.marca).nicho}
+                    </span>
+                  </h3>
+                  <p className="text-sm text-pizarra">{b.nombre} · {b.ciudad}</p>
+                  <p className="text-sm text-pizarra mt-0.5">📱 {b.celular} · {b.email}</p>
+                  {b.direccion && <p className="text-xs text-pizarra">{b.direccion}</p>}
+                  <p className="text-xs text-pizarra mt-1">
+                    {b.numCitas} cita{b.numCitas === 1 ? "" : "s"} registrada{b.numCitas === 1 ? "" : "s"}
+                    {b.suscripcionVence && ` · vence ${new Date(b.suscripcionVence).toLocaleDateString("es-CO")}`}
+                  </p>
+                </div>
+                <EstadoBadge estado={b.estado} />
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {b.estado === "pendiente" && (
+                  <>
+                    <button className="btn-blue text-sm py-1.5" onClick={() => accion(b.id, "aprobar")}>Aprobar</button>
+                    <button className="btn-outline text-sm py-1.5" onClick={() => accion(b.id, "rechazar")}>Rechazar</button>
+                  </>
+                )}
+                {b.estado === "activo" && (
+                  <button className="btn-outline text-sm py-1.5" onClick={() => accion(b.id, "desactivar")}>Desactivar</button>
+                )}
+                {(b.estado === "inactivo" || b.estado === "rechazado") && (
+                  <button className="btn-blue text-sm py-1.5" onClick={() => accion(b.id, "activar")}>Activar</button>
+                )}
+                <button className="btn-outline text-sm py-1.5" onClick={() => setEditandoInfo(b)}>Editar info</button>
+                {["activo", "inactivo"].includes(b.estado) && (
+                  <button className="btn-dark text-sm py-1.5" onClick={() => setEditando(b)}>Configurar planes</button>
+                )}
+                <button
+                  className="text-sm py-1.5 px-3 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-semibold ml-auto"
+                  onClick={() => setEliminando(b)}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
+        )}
+
+        {vista === "solicitudes" && (
+          <div className="mt-6 space-y-3">
+            {solicitudes.length === 0 && (
+              <div className="card p-8 text-center text-pizarra">Aún no hay solicitudes de contacto.</div>
+            )}
+            {solicitudes.map((s) => (
+              <div key={s.id} className={`card p-4 ${s.estado === "nueva" ? "border-l-4 border-l-brand" : ""}`}>
+                <div className="flex justify-between items-start gap-2 flex-wrap">
+                  <div>
+                    <h3 className="font-display text-lg">
+                      {s.nombre}
+                      {s.local && <span className="text-pizarra text-base font-normal"> · {s.local}</span>}
+                    </h3>
+                    <p className="text-sm text-pizarra mt-0.5">📱 {s.celular}</p>
+                    <p className="text-xs text-pizarra">
+                      {new Date(s.createdAt).toLocaleString("es-CO")}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${s.estado === "nueva" ? "bg-brand text-white" : "bg-gray-200 text-pizarra"}`}>
+                    {s.estado === "nueva" ? "Nueva" : "Atendida"}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm bg-crema rounded-lg p-3 whitespace-pre-wrap">{s.mensaje}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a className="btn-wa text-sm py-1.5" href={`https://wa.me/${s.celular.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
+                    Responder por WhatsApp
+                  </a>
+                  {s.estado === "nueva" ? (
+                    <button className="btn-blue text-sm py-1.5" onClick={() => accionSolicitud(s.id, "atender")}>Marcar atendida</button>
+                  ) : (
+                    <button className="btn-outline text-sm py-1.5" onClick={() => accionSolicitud(s.id, "reabrir")}>Reabrir</button>
+                  )}
+                  <button
+                    className="text-sm py-1.5 px-3 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-semibold ml-auto"
+                    onClick={() => accionSolicitud(s.id, "eliminar")}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {vista === "control" && (
+          <ControlSuscripciones barberos={todosBarberos} onActualizar={cargar} />
+        )}
+      </main>
+
+      {creandoBarbero && (
+        <CrearBarberoModal
+          defaultBarberia={sedeDeLaMarca}
+          onClose={() => setCreandoBarbero(false)}
+          onCreado={(nuevoBarbero, abrirPlanes) => {
+            setCreandoBarbero(false);
+            cargar();
+            if (abrirPlanes && nuevoBarbero) {
+              setEditando(nuevoBarbero);
+            }
+          }}
+        />
+      )}
+
+      {editandoInfo && (
+        <EditorInfoBarbero
+          barbero={editandoInfo}
+          onClose={() => setEditandoInfo(null)}
+          onGuardado={() => { setEditandoInfo(null); cargar(); }}
+        />
+      )}
+
+      {editando && (
+        <EditorPlanes
+          barbero={editando}
+          onClose={() => setEditando(null)}
+          onGuardado={() => { setEditando(null); cargar(); }}
+        />
+      )}
+
+      {eliminando && (
+        <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
+          <div className="card p-6 w-full max-w-md space-y-4">
+            <h2 className="font-display text-2xl text-red-600">Eliminar negocio</h2>
+            <p className="text-sm text-pizarra">
+              Vas a eliminar de forma <b>permanente</b> a <b>{eliminando.nombre}</b> ({eliminando.local}).
+            </p>
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
+              Se borrarán también su acceso (login) y{" "}
+              <b>{eliminando.numCitas} cita{eliminando.numCitas === 1 ? "" : "s"}</b>. Esta acción no se puede deshacer.
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button className="btn-outline flex-1" onClick={() => setEliminando(null)} disabled={borrando}>
+                Cancelar
+              </button>
+              <button
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-60"
+                onClick={eliminarBarbero}
+                disabled={borrando}
+              >
+                {borrando ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

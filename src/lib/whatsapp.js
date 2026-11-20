@@ -1,0 +1,181 @@
+import { METODOS_PAGO_LABEL, formatoCOP } from "./constants";
+import { EMOJI as E } from "./emojis";
+import { formatearHora12 } from "./disponibilidad";
+import { obtenerMarca, capitalizar } from "./brands";
+
+// Sitio del proyecto: se usa como firma promocional en los mensajes que llegan
+// al cliente final, para dar a conocer la plataforma.
+const SITIO_URL_DEFAULT = "https://dharma-nails-spa.vercel.app";
+
+// Resuelve la URL del sitio validando que sea realmente una URL http(s). Si la
+// variable de entorno viene vacía o mal configurada (p. ej. en Vercel quedó
+// pegado un token/clave en vez de la dirección), se descarta para no mostrar
+// texto basura en el mensaje del cliente. Se quita el "/" final para una firma
+// limpia.
+function resolverSitioUrl() {
+  const raw = (process.env.NEXT_PUBLIC_BASE_URL || "").trim();
+  if (/^https?:\/\/\S+$/i.test(raw)) {
+    return raw.replace(/\/+$/, "");
+  }
+  return SITIO_URL_DEFAULT;
+}
+
+const SITIO_URL = resolverSitioUrl();
+
+// Pie para mensajes dirigidos al cliente con el enlace al sitio del spa.
+// Respeta el modo "plano" (PC/WhatsApp Desktop) donde los emojis se corrompen.
+function firmaSitio(marca, { plano = false } = {}) {
+  const url = SITIO_URL;
+  const texto = marca.textos.firmaCitas || "Agenda tus citas fácil con";
+  if (plano) {
+    return `\n\n${texto} ${marca.nombre}:\n${url}`;
+  }
+  return `\n\n${E.CALENDARIO} _${texto}_ *${marca.nombre}*\n👉 ${url}`;
+}
+
+// Nombre del negocio para los mensajes, con respaldo según el nicho
+// ("el spa").
+function nombreNegocio(barbero, marca) {
+  if (barbero?.local) return barbero.local;
+  const articulo = marca.textos.negocio === "spa" ? "el" : "la";
+  return `${articulo} ${marca.textos.negocio}`;
+}
+
+// Emoji por clave; NAVAJA es el emoji del nicho (poste, huella, esmalte).
+function emojiDe(k, marca) {
+  return k === "NAVAJA" ? marca.textos.emoji : E[k];
+}
+
+export function normalizarCelular(celular) {
+  if (!celular) return "";
+  let n = String(celular).replace(/\D/g, "");
+  if (n.startsWith("57")) return n;
+  if (n.length === 10) return "57" + n;
+  return n;
+}
+
+export function linkWhatsApp(celular, mensaje) {
+  const num = normalizarCelular(celular);
+  const texto = encodeURIComponent(mensaje || "");
+  return `https://wa.me/${num}?text=${texto}`;
+}
+
+// Quita emojis y selectores de variación de un texto. Se usa en la versión
+// "plana" (PC), donde WhatsApp Desktop en Windows corrompe los emojis a "�".
+function limpiarEmojis(s) {
+  return String(s)
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}\u{FE0F}\u{200D}]/gu,
+      ""
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// plano=true -> mensaje sin emojis (para PC/WhatsApp Desktop, más estético y sin "�").
+// plano=false -> mensaje con emojis (para móvil, donde se ven bien).
+export function mensajeNuevaCita(cita, barbero, { plano = false } = {}) {
+  const plan = cita.planSnapshot || {};
+  const marca = obtenerMarca(barbero?.marca);
+  const em = (k) => (plano ? "" : `${emojiDe(k, marca)} `);
+  const servicios = (plan.servicios || [])
+    .map((s) => (plano ? limpiarEmojis(s) : s))
+    .join(", ");
+  const fecha = formatearFecha(cita.fecha);
+
+  let texto =
+    `${em("NAVAJA")}*Nueva cita solicitada*\n\n` +
+    `${em("PERSONA")}*Cliente:* ${cita.clienteNombre}\n` +
+    `${em("CELULAR")}*Cel:* ${cita.clienteCelular}\n` +
+    `${em("TIJERAS")}*Plan:* ${plan.nombre || cita.plan}\n` +
+    `*Servicios:* ${servicios}\n` +
+    `${em("CALENDARIO")}*Fecha:* ${fecha}\n` +
+    `${em("RELOJ")}*Hora:* ${formatearHora12(cita.horaInicio)} - ${formatearHora12(cita.horaFin)} (${plan.duracion} min)\n` +
+    `${em("BILLETE")}*Valor:* ${formatoCOP(plan.precio)}\n`;
+
+  if (cita.metodoPago) {
+    texto += `${em("DINERO")}*Pago:* ${METODOS_PAGO_LABEL[cita.metodoPago] || cita.metodoPago}\n`;
+  }
+  if ((plan.anticipo || 0) > 0) {
+    const monto = Math.round((plan.precio * plan.anticipo) / 100);
+    texto += `\n${em("BILLETE")}*Anticipo (${plan.anticipo}%):* ${formatoCOP(monto)} - te adjunto el comprobante.\n`;
+  }
+  texto += `\n_¡Quedo atento a la confirmación!_`;
+  return texto;
+}
+
+export function mensajeConfirmacion(cita, barbero, { plano = false } = {}) {
+  const plan = cita.planSnapshot || {};
+  const marca = obtenerMarca(barbero?.marca);
+  const em = (k) => (plano ? "" : `${emojiDe(k, marca)} `);
+  const servicios = (plan.servicios || [])
+    .map((s) => (plano ? limpiarEmojis(s) : s))
+    .join(", ");
+  const fecha = formatearFecha(cita.fecha);
+  const cierreTitulo = plano ? "" : ` ${marca.textos.emoji}`;
+  const direccion = barbero?.direccion
+    ? `\n${em("UBICACION")}*Dirección:* ${barbero.direccion}`
+    : "";
+  const tituloCliente = marca.textos.sujetoCliente
+    ? `La cita de ${marca.textos.sujetoCliente} quedo confirmada en ${nombreNegocio(barbero, marca)}!`
+    : `Tu cita quedo confirmada en ${nombreNegocio(barbero, marca)}!`;
+  return (
+    `${em("NAVAJA")}*${tituloCliente}*${cierreTitulo}\n\n` +
+    `${em("PERSONA")}*${capitalizar(marca.textos.profesional)}:* ${barbero?.nombre || ""}\n` +
+    `${em("TIJERAS")}*Plan:* ${plan.nombre || cita.plan}\n` +
+    `*Servicios:* ${servicios}\n` +
+    `${em("CALENDARIO")}*Fecha:* ${fecha}\n` +
+    `${em("RELOJ")}*Hora:* ${formatearHora12(cita.horaInicio)} - ${formatearHora12(cita.horaFin)} (${plan.duracion} min)\n` +
+    `${em("BILLETE")}*Valor:* ${formatoCOP(plan.precio)}` +
+    direccion +
+    `\n\n_${marca.textos.cierreEspera || "¡Te esperamos!"}_` +
+    firmaSitio(marca, { plano })
+  );
+}
+
+export function mensajeRechazo(cita, barbero) {
+  const marca = obtenerMarca(barbero?.marca);
+  const sujeto = marca.textos.sujetoCliente;
+  const motivo = sujeto
+    ? `atender a ${sujeto} para el`
+    : `atender tu cita para el`;
+  return (
+    `Hola ${cita.clienteNombre}, soy *${barbero?.nombre || ""}* de *${nombreNegocio(barbero, marca)}*.\n\n` +
+    `Lamentablemente no puedo ${motivo} ` +
+    `${formatearFecha(cita.fecha)} a las ${formatearHora12(cita.horaInicio)}.\n\n` +
+    `_Hablemos para reprogramar._`
+  );
+}
+
+export function mensajeCancelacion(cita, barbero, { motivo = "" } = {}) {
+  const detalleMotivo = motivo ? `\n\n*Motivo:* ${motivo}` : "";
+  const marca = obtenerMarca(barbero?.marca);
+  const sujeto = marca.textos.sujetoCliente;
+  const citaRef = sujeto ? `la cita de ${sujeto}` : `tu cita`;
+  return (
+    `Hola ${cita.clienteNombre}, soy *${barbero?.nombre || ""}* de *${nombreNegocio(barbero, marca)}*.\n\n` +
+    `Tuve que cancelar ${citaRef} para el ` +
+    `${formatearFecha(cita.fecha)} a las ${formatearHora12(cita.horaInicio)}.` +
+    detalleMotivo +
+    `\n\n_Escríbeme para reprogramar cuando quieras._`
+  );
+}
+
+function formatearFecha(fechaISO) {
+  if (!fechaISO) return "";
+  try {
+    // "YYYY-MM-DD" sin hora se parsea como UTC 00:00, lo que en Bogotá (UTC-5)
+    // retrocede al día anterior. Forzar mediodía UTC garantiza el día correcto
+    // en cualquier timezone entre UTC-11 y UTC+11.
+    const d = new Date(fechaISO + "T12:00:00Z");
+    return d.toLocaleDateString("es-CO", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "America/Bogota",
+    });
+  } catch {
+    return String(fechaISO);
+  }
+}
