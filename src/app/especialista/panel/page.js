@@ -37,10 +37,10 @@ export default function PanelBarberoPage() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.session || d.session.role !== "barbero") {
-          router.replace(`/barbero/login`);
+          router.replace(`/especialista/login`);
           setSesion(null);
         } else if (d.session.passwordTemporal) {
-          router.replace(`/barbero/cambiar-password`);
+          router.replace(`/especialista/cambiar-password`);
         } else {
           setSesion(d.session);
         }
@@ -77,7 +77,7 @@ export default function PanelBarberoPage() {
         <h1 className="font-display text-2xl sm:text-3xl">Hola, {sesion.nombre.split(" ")[0]} 👋</h1>
 
         <div className="mt-4">
-          <ActivarNotificaciones descripcion="Recibí un aviso apenas un cliente te solicite una cita, aunque tengas la app cerrada." />
+          <ActivarNotificaciones descripcion="Recibe un aviso apenas una clienta te solicite una cita, aunque tengas la app cerrada." />
         </div>
 
         <div className="mt-3 sm:mt-4 flex overflow-x-auto border-b border-black/10 scrollbar-none">

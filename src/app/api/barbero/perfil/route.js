@@ -4,7 +4,12 @@ import Cita from "@/models/Cita";
 import { ok, fail, handler } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { ROLES, ESTADO_CITA } from "@/lib/constants";
-import { citasEnConflicto } from "@/lib/disponibilidad";
+import {
+  citasEnConflicto,
+  citasFueraDeSemana,
+  validarSemana,
+  fechaLocalHoy,
+} from "@/lib/disponibilidad";
 import { serializarCita } from "@/lib/serializers";
 import { MARCA_DEFAULT } from "@/lib/brands";
 
@@ -56,14 +61,46 @@ export const PUT = handler(async (req) => {
   const b = await Barbero.findById(session.barberoId);
   if (!b) return fail("Profesional no encontrado", 404);
 
-  if (body.horario) {
+  // Horario semanal por día. Se valida y, antes de guardarlo, se revisa que no
+  // deje por fuera citas ya agendadas (día que deja de trabajarse u horas que
+  // salen del nuevo horario).
+  if (body.horario && Array.isArray(body.horario.semana)) {
+    const { semana, error } = validarSemana(body.horario.semana);
+    if (error) return fail(error, 400);
+
+    const citasFuturas = await Cita.find({
+      barbero: b._id,
+      fecha: { $gte: fechaLocalHoy() },
+      estado: { $in: [ESTADO_CITA.SOLICITADA, ESTADO_CITA.CONFIRMADA] },
+    }).lean();
+    const conflictos = citasFueraDeSemana({ citas: citasFuturas, semana }).map(serializarCita);
+    if (conflictos.length > 0) {
+      return ok(
+        {
+          error:
+            "Ese horario deja por fuera citas ya agendadas. Reagéndalas o cancélalas primero.",
+          conflictos,
+        },
+        409
+      );
+    }
+
+    b.horario.semana = semana;
+    // Resumen en el formato anterior, para lo que todavía lo lee (chips de
+    // fechas al agendar, panel del admin).
+    const activos = semana.filter((d) => d.activo);
+    b.horario.diasLaborales = activos.map((d) => d.dia);
+    b.horario.horaInicio = activos.map((d) => d.tramos[0].ini).sort()[0];
+    b.horario.horaFin = activos.map((d) => d.tramos[d.tramos.length - 1].fin).sort().reverse()[0];
+    b.horario.almuerzo = { ...(b.horario.almuerzo || {}), activo: false };
+  } else if (body.horario) {
     b.horario.horaInicio = body.horario.horaInicio ?? b.horario.horaInicio;
     b.horario.horaFin = body.horario.horaFin ?? b.horario.horaFin;
     if (Array.isArray(body.horario.diasLaborales))
       b.horario.diasLaborales = body.horario.diasLaborales;
     if (body.horario.duracionTurnoMin != null) {
       const dur = Number(body.horario.duracionTurnoMin);
-      if (dur >= 15 && dur <= 120) b.horario.duracionTurnoMin = dur;
+      if (dur >= 5 && dur <= 120) b.horario.duracionTurnoMin = dur;
     }
     if (body.horario.almuerzo) {
       b.horario.almuerzo = {
@@ -112,7 +149,7 @@ export const PUT = handler(async (req) => {
         return ok(
           {
             error:
-              "No se puede bloquear ese tiempo: ya tienes citas agendadas. Contactá al cliente para reagendar.",
+              "No se puede bloquear ese tiempo: ya tienes citas agendadas. Contacta a la clienta para reagendar.",
             conflictos,
           },
           409
@@ -121,6 +158,10 @@ export const PUT = handler(async (req) => {
     }
   }
 
+  if (body.horario?.duracionTurnoMin != null && Array.isArray(body.horario.semana)) {
+    const dur = Number(body.horario.duracionTurnoMin);
+    if (dur >= 5 && dur <= 120) b.horario.duracionTurnoMin = dur;
+  }
   if (Array.isArray(body.diasBloqueados)) b.diasBloqueados = body.diasBloqueados;
   if (Array.isArray(body.franjasBloqueadas)) b.franjasBloqueadas = body.franjasBloqueadas;
   if (body.ventanaCancelacionHoras != null)

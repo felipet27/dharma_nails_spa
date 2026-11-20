@@ -1,6 +1,17 @@
 // Íconos SVG de línea (usan currentColor). El ícono de cada marca está en
 // public/brand/ y se muestra con <IconoMarca> (components/Header.js).
 
+// Frasco de esmalte de uñas.
+export function Esmalte({ className = "w-6 h-6" }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="10" y="2" width="4" height="7" rx="1" />
+      <path d="M8 9h8l1 3v8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-8z" />
+      <line x1="7" y1="14" x2="17" y2="14" />
+    </svg>
+  );
+}
+
 export function Tijeras({ className = "w-6 h-6" }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

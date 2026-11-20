@@ -62,7 +62,7 @@ export function generarGoogleCalendarUrl(cita, barbero = {}) {
     `Servicio: ${cita.planSnapshot?.nombre || cita.plan || "Servicio"}`,
     cita.planSnapshot?.precio ? `Precio: $${cita.planSnapshot.precio.toLocaleString("es-CO")} COP` : null,
     cita.metodoPago ? `Método de pago: ${cita.metodoPago}` : null,
-    cita.esManual ? `Nota: Agendada manualmente por el ${obtenerMarca(barbero.marca).textos.profesional}` : null,
+    cita.esManual ? `Nota: Agendada manualmente por la ${obtenerMarca(barbero.marca).textos.profesional}` : null,
   ].filter(Boolean);
 
   const ubicacion = [
@@ -99,7 +99,7 @@ function generarVEvent(cita, barbero = {}) {
     `Servicio: ${cita.planSnapshot?.nombre || cita.plan || "Servicio"}`,
     cita.planSnapshot?.precio ? `Precio: $${cita.planSnapshot.precio.toLocaleString("es-CO")} COP` : null,
     cita.metodoPago ? `Método de pago: ${cita.metodoPago}` : null,
-    cita.esManual ? `Nota: Agendada manualmente por el ${obtenerMarca(barbero.marca).textos.profesional}` : null,
+    cita.esManual ? `Nota: Agendada manualmente por la ${obtenerMarca(barbero.marca).textos.profesional}` : null,
   ].filter(Boolean);
 
   const ubicacion = [

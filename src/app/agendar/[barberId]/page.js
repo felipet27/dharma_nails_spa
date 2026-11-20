@@ -9,7 +9,7 @@ import SocialLinks from "@/components/SocialLinks";
 import { WhatsAppIcon } from "@/components/Icons";
 import ActivarRecordatoriosCliente from "@/components/ActivarRecordatoriosCliente";
 import { formatoCOP, METODOS_PAGO_LABEL } from "@/lib/constants";
-import { fechaLocalHoy, esFechaPasada, formatearHora12 } from "@/lib/disponibilidad";
+import { fechaLocalHoy, esFechaPasada, formatearHora12, semanaDeHorario } from "@/lib/disponibilidad";
 import { esMovil } from "@/lib/dispositivo";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import { useBrand, useMarcaDelNegocio } from "@/components/BrandProvider";
@@ -205,7 +205,7 @@ export default function AgendarPage() {
           <h2 className="font-display text-xl">¿Quién agenda?</h2>
           <div>
             <label className="label">Nombre completo</label>
-            <input className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Juan Pérez" />
+            <input className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Ana María Gómez" />
           </div>
           <div>
             <label className="label">Celular</label>
@@ -257,8 +257,8 @@ export default function AgendarPage() {
       {/* PASO 2: elegir plan */}
       {paso === 2 && (
         <div className="mt-4 space-y-4">
-          <h2 className="font-display text-xl">Escoge tu plan</h2>
-          <div className="grid sm:grid-cols-3 gap-4 items-stretch">
+          <h2 className="font-display text-xl">Elige tu servicio</h2>
+          <div className={`grid gap-4 items-stretch ${barbero.planes.length > 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-3"}`}>
             {barbero.planes.map((p) => (
               <button
                 key={p.key}
@@ -269,7 +269,7 @@ export default function AgendarPage() {
                   <h3 className="font-display text-2xl leading-none">{p.nombre}</h3>
                   <span className="text-brand-deep font-bold whitespace-nowrap">{formatoCOP(p.precio)}</span>
                 </div>
-                <ul className="mt-3 text-sm text-pizarra space-y-1 flex-1">
+                <ul className={`text-sm text-pizarra space-y-1 flex-1 ${p.servicios.length ? "mt-3" : ""}`}>
                   {p.servicios.map((s, i) => (
                     <li key={i} className="flex gap-1.5"><span className="text-brand-deep">✓</span>{s}</li>
                   ))}
@@ -280,7 +280,7 @@ export default function AgendarPage() {
               </button>
             ))}
           </div>
-          <p className="text-sm text-pizarra text-center">Toca un plan para continuar.</p>
+          <p className="text-sm text-pizarra text-center">Toca un servicio para continuar.</p>
         </div>
       )}
 
@@ -291,7 +291,7 @@ export default function AgendarPage() {
 
           {/* Accesos rápidos de fecha */}
           <div className="flex flex-wrap gap-2">
-            {chipsFecha(barbero.horario?.diasLaborales).map((c) => (
+            {chipsFecha(semanaDeHorario(barbero.horario).filter((d) => d.activo).map((d) => d.dia)).map((c) => (
               <button
                 key={c.valor}
                 onClick={() => elegirFecha(c.valor)}
@@ -375,7 +375,7 @@ export default function AgendarPage() {
                   Anticipo requerido: {formatoCOP(montoAnticipo)} ({plan.anticipo}%)
                 </p>
                 <span className="badge bg-amber-200/80 text-amber-900 text-xs font-semibold">
-                  Seña de cupo
+                  Separa tu cita
                 </span>
               </div>
               <div className="p-3 bg-white/80 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
@@ -425,7 +425,7 @@ export default function AgendarPage() {
             <div className="space-y-2">
               {metodoPago && metodoPago !== "efectivo" && (
                 <p className="text-sm font-semibold text-tinta text-left">
-                  {requiereAnticipo ? "2. Envía el comprobante:" : `Luego avísale al ${t.profesional}:`}
+                  {requiereAnticipo ? "2. Envía el comprobante:" : `Luego avísale a la ${t.profesional}:`}
                 </p>
               )}
               <a
@@ -442,7 +442,7 @@ export default function AgendarPage() {
                 </span>
               </a>
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg p-2.5 text-center font-medium">
-                ⚠️ <strong>Importante:</strong> Tu cita no quedará confirmada hasta que el {t.profesional} reciba tu mensaje.
+                ⚠️ <strong>Importante:</strong> Tu cita no quedará confirmada hasta que la {t.profesional} reciba tu mensaje.
               </p>
             </div>
           )}
@@ -475,7 +475,7 @@ function Wrap({ children }) {
 }
 
 function Pasos({ paso }) {
-  const items = ["Datos", "Plan", "Horario", "Pago", "Listo"];
+  const items = ["Datos", "Servicio", "Horario", "Pago", "Listo"];
   return (
     <div className="flex items-center gap-1.5 mt-1">
       {items.map((it, i) => (
@@ -490,11 +490,11 @@ function Pasos({ paso }) {
 
 function Resumen({ barbero, plan, fecha, hora }) {
   const { t } = useBrand();
-  const duracionReal = Number(plan.duracion) || barbero.horario?.duracionTurnoMin || 30;
+  const duracionReal = Number(plan.duracion) || 30;
   return (
     <div className="rounded-lg border border-black/10 p-4 text-left text-sm space-y-1">
       <p><b>{capitalizar(t.profesional)}:</b> {barbero.nombre} — {barbero.local}</p>
-      <p><b>Plan:</b> {plan.nombre} ({plan.servicios.join(", ")})</p>
+      <p><b>Servicio:</b> {plan.nombre} ({plan.servicios.join(", ")})</p>
       <p className="capitalize"><b>Fecha:</b> {etiquetaFecha(fecha)}</p>
       <p><b>Hora:</b> {hora12(hora)} ({duracionReal} min)</p>
       <p><b>Valor:</b> {formatoCOP(plan.precio)}</p>
@@ -566,11 +566,11 @@ function DatosPago({ datosPago = {}, metodo }) {
   // Pago por QR: mostramos la imagen que cargó el barbero.
   if (metodo === "qr") {
     if (!datosPago.qrImagen) {
-      return <p className="text-sm text-pizarra">El {t.profesional} aún no cargó un código QR. Escribile por WhatsApp para pedirle los datos de pago.</p>;
+      return <p className="text-sm text-pizarra">La {t.profesional} aún no cargó un código QR. Escríbele por WhatsApp para pedirle los datos de pago.</p>;
     }
     return (
       <div className="text-sm">
-        <p className="font-medium mb-2">Escaneá este código QR para pagar:</p>
+        <p className="font-medium mb-2">Escanea este código QR para pagar:</p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={datosPago.qrImagen} alt="Código QR de pago" className="w-48 h-48 object-contain border rounded-lg bg-white p-2" />
       </div>
@@ -586,7 +586,7 @@ function DatosPago({ datosPago = {}, metodo }) {
   const item = cuentas[metodo];
   if (!item) return null;
   if (!item.valor) {
-    return <p className="text-sm text-pizarra">El {t.profesional} aún no cargó su {item.label}. Escribile por WhatsApp para pedirle los datos de pago.</p>;
+    return <p className="text-sm text-pizarra">La {t.profesional} aún no cargó su {item.label}. Escríbele por WhatsApp para pedirle los datos de pago.</p>;
   }
   return (
     <div className="text-sm">

@@ -8,7 +8,7 @@ const CitaSchema = new mongoose.Schema(
     clienteNombre: { type: String, required: true },
     clienteCelular: { type: String, default: "" },
 
-    plan: { type: String, required: true }, // bronce | plata | oro
+    plan: { type: String, required: true }, // clave del servicio (ver Barbero.planes)
     // Copia inmutable del plan al momento de agendar (precio/servicios/duración)
     planSnapshot: {
       key: String,

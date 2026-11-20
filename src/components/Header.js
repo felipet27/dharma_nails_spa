@@ -32,7 +32,9 @@ export default function Header({ children }) {
 
   return (
     <header
-      className={`sticky top-0 z-30 text-hueso transition-all duration-300 ${
+      // pt safe-area: en iPhone con la app instalada (status bar
+      // "black-translucent") el header no queda debajo de la hora ni del notch.
+      className={`sticky top-0 z-30 text-hueso transition-all duration-300 pt-[env(safe-area-inset-top)] ${
         scrolled
           ? "bg-tinta/80 backdrop-blur-md border-b border-white/10 shadow-lg"
           : "bg-tinta"

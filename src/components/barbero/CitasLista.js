@@ -12,7 +12,7 @@ import { useDialog } from "@/components/DialogProvider";
 import { generarIcsDia, descargarIcs } from "@/lib/calendario";
 
 export default function CitasLista({ onCambio }) {
-  const { pedirMotivo } = useDialog();
+  const { pedirMotivo, abrirWhatsApp } = useDialog();
   const [fecha, setFecha] = useState(fechaLocalHoy());
   const [citas, setCitas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -33,7 +33,7 @@ export default function CitasLista({ onCambio }) {
     if (accion === "rechazar") {
       const motivo = await pedirMotivo({
         titulo: "Rechazar cita",
-        mensaje: "Cuéntanos por qué la rechazás. El cliente verá este mensaje.",
+        mensaje: "Cuéntanos por qué la rechazas. La clienta verá este mensaje.",
         placeholder: "Motivo del rechazo (opcional)",
         confirmarLabel: "Rechazar",
         peligro: true,
@@ -44,7 +44,7 @@ export default function CitasLista({ onCambio }) {
     if (accion === "cancelar") {
       const motivo = await pedirMotivo({
         titulo: "Cancelar cita confirmada",
-        mensaje: "Se le avisará al cliente por WhatsApp. Cuéntanos el motivo si quieres.",
+        mensaje: "Se le avisará a la clienta por WhatsApp. Cuéntanos el motivo si quieres.",
         placeholder: "Motivo de la cancelación (opcional)",
         confirmarLabel: "Sí, cancelar",
         cancelarLabel: "No",
@@ -56,7 +56,7 @@ export default function CitasLista({ onCambio }) {
     if (accion === "no-asistio") {
       const motivo = await pedirMotivo({
         titulo: "Marcar como No asistió",
-        mensaje: "¿El cliente no se presentó a su cita? La cita cambiará de estado y no sumará a los cobros del resumen.",
+        mensaje: "¿La clienta no se presentó a su cita? La cita cambiará de estado y no sumará a los cobros del resumen.",
         placeholder: "Nota interna (opcional)",
         confirmarLabel: "Sí, marcar No asistió",
         cancelarLabel: "Volver",
@@ -72,7 +72,7 @@ export default function CitasLista({ onCambio }) {
     });
     const d = await res.json();
     if (!res.ok) return alert(d.error);
-    if (d.linkWhatsApp) window.open(d.linkWhatsApp, "_blank");
+    if (d.linkWhatsApp) abrirWhatsApp(d.linkWhatsApp);
 
     if (accion === "confirmar") {
       const citaAceptada = citas.find((c) => (c.id || c._id) === id);

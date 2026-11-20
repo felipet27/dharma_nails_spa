@@ -41,6 +41,10 @@ export const metadata = {
 
 export const viewport = {
   themeColor: BRANDS[MARCA_DEFAULT].colores.brand,
+  width: "device-width",
+  initialScale: 1,
+  // Necesario para que env(safe-area-inset-*) funcione en iPhone con notch.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }) {

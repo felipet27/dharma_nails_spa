@@ -1,5 +1,6 @@
 import { dbConnect } from "@/lib/db";
 import Cita from "@/models/Cita";
+import Barbero from "@/models/Barbero";
 import { ok, fail, handler } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { ESTADO_CITA, ROLES, METODOS_PAGO_LABEL } from "@/lib/constants";
@@ -108,25 +109,25 @@ export const GET = handler(async (req) => {
 
   const desgloseMetodos = Object.values(metodosMap).sort((a, b) => b.total - a.total);
 
-  // 2. Desglose por plan (bronce, plata, oro)
-  const desglosePlanes = {
-    bronce: { cantidad: 0, completadas: 0, pendientes: 0, ingresosCobrados: 0, ingresos: 0 },
-    plata: { cantidad: 0, completadas: 0, pendientes: 0, ingresosCobrados: 0, ingresos: 0 },
-    oro: { cantidad: 0, completadas: 0, pendientes: 0, ingresosCobrados: 0, ingresos: 0 },
-  };
+  // 2. Desglose por servicio (cualquier clave, incluidos servicios ya borrados:
+  // su nombre sale de la copia guardada en la cita).
+  const desglosePlanes = {};
+  const nombresDeCitas = {};
 
   for (const c of citasActivas) {
     const key = c.plan;
     const precio = c.planSnapshot?.precio || 0;
-    if (desglosePlanes[key]) {
-      desglosePlanes[key].cantidad += 1;
-      desglosePlanes[key].ingresos += precio;
-      if (c.estado === ESTADO_CITA.COMPLETADA) {
-        desglosePlanes[key].completadas += 1;
-        desglosePlanes[key].ingresosCobrados += precio;
-      } else {
-        desglosePlanes[key].pendientes += 1;
-      }
+    if (!desglosePlanes[key]) {
+      desglosePlanes[key] = { cantidad: 0, completadas: 0, pendientes: 0, ingresosCobrados: 0, ingresos: 0 };
+    }
+    if (c.planSnapshot?.nombre) nombresDeCitas[key] = c.planSnapshot.nombre;
+    desglosePlanes[key].cantidad += 1;
+    desglosePlanes[key].ingresos += precio;
+    if (c.estado === ESTADO_CITA.COMPLETADA) {
+      desglosePlanes[key].completadas += 1;
+      desglosePlanes[key].ingresosCobrados += precio;
+    } else {
+      desglosePlanes[key].pendientes += 1;
     }
   }
 
@@ -168,6 +169,15 @@ export const GET = handler(async (req) => {
     },
     desgloseMetodos,
     desglose: desglosePlanes,
+    // Nombre visible de cada servicio por clave (el actual, o el de la cita si
+    // el servicio ya no existe).
+    nombresPlanes: {
+      ...nombresDeCitas,
+      ...Object.fromEntries(
+        ((await Barbero.findById(session.barberoId).select("planes.key planes.nombre").lean())?.planes || [])
+          .map((p) => [p.key, p.nombre])
+      ),
+    },
     productividad: {
       minutosTrabajados,
       minutosPendientes,

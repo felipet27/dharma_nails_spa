@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import EstadoBadge from "@/components/EstadoBadge";
 import { WhatsAppIcon, CalendarioIcon } from "@/components/Icons";
 import { DIAS_SEMANA } from "@/lib/constants";
-import { fechaLocalHoy, minAHhmm, jornadaDelDia, PASO_MIN, formatearHora12 } from "@/lib/disponibilidad";
+import { fechaLocalHoy, minAHhmm, jornadaDelDia, intervaloInicio, formatearHora12 } from "@/lib/disponibilidad";
 import { esMovil } from "@/lib/dispositivo";
 import { useDialog } from "@/components/DialogProvider";
 import { generarIcsDia, descargarIcs } from "@/lib/calendario";
@@ -32,7 +32,7 @@ const CITA_ESTILO = {
 const COL_HORA = "font-mono text-xs text-pizarra w-[11ch] shrink-0 whitespace-nowrap tabular-nums";
 
 export default function Calendario({ perfil, diaInicial, onAgendarManual }) {
-  const { pedirMotivo } = useDialog();
+  const { pedirMotivo, abrirWhatsApp } = useDialog();
   const [citas, setCitas] = useState([]);
   const hoy = fechaLocalHoy();
   const [ref, setRef] = useState(new Date());
@@ -65,7 +65,7 @@ export default function Calendario({ perfil, diaInicial, onAgendarManual }) {
     if (accion === "rechazar") {
       const motivo = await pedirMotivo({
         titulo: "Rechazar cita",
-        mensaje: "Cuéntanos por qué la rechazás. El cliente verá este mensaje.",
+        mensaje: "Cuéntanos por qué la rechazas. La clienta verá este mensaje.",
         placeholder: "Motivo del rechazo (opcional)",
         confirmarLabel: "Rechazar",
         peligro: true,
@@ -76,7 +76,7 @@ export default function Calendario({ perfil, diaInicial, onAgendarManual }) {
     if (accion === "cancelar") {
       const motivo = await pedirMotivo({
         titulo: "Cancelar cita confirmada",
-        mensaje: "Se le avisará al cliente por WhatsApp. Cuéntanos el motivo si quieres.",
+        mensaje: "Se le avisará a la clienta por WhatsApp. Cuéntanos el motivo si quieres.",
         placeholder: "Motivo de la cancelación (opcional)",
         confirmarLabel: "Sí, cancelar",
         cancelarLabel: "No",
@@ -88,7 +88,7 @@ export default function Calendario({ perfil, diaInicial, onAgendarManual }) {
     if (accion === "no-asistio") {
       const confirmar = await pedirMotivo({
         titulo: "Marcar como No asistió",
-        mensaje: "¿El cliente no se presentó a su cita? La cita cambiará de estado y no sumará a los cobros del resumen.",
+        mensaje: "¿La clienta no se presentó a su cita? La cita cambiará de estado y no sumará a los cobros del resumen.",
         placeholder: "Nota o motivo (opcional)",
         confirmarLabel: "Sí, marcar No asistió",
         cancelarLabel: "Volver",
@@ -104,7 +104,7 @@ export default function Calendario({ perfil, diaInicial, onAgendarManual }) {
     });
     const d = await res.json();
     if (!res.ok) return alert(d.error);
-    if (d.linkWhatsApp) window.open(d.linkWhatsApp, "_blank");
+    if (d.linkWhatsApp) abrirWhatsApp(d.linkWhatsApp);
     cargar();
   }
 
@@ -321,8 +321,8 @@ function SlotFila({ slot, fecha, abierta, onToggle, onAccion, onAgendarManual })
 
   if (slot.tipo === "ausencia") {
     const f = slot.franja || {};
-    const etiqueta = slot.esAlmuerzo
-      ? "🍽️ Almuerzo"
+    const etiqueta = slot.esPausa
+      ? "☕ Pausa"
       : `🚫 Ausencia${f.motivo ? ` · ${f.motivo}` : ""}`;
     if (!slot.esInicio) {
       return (
@@ -330,7 +330,7 @@ function SlotFila({ slot, fecha, abierta, onToggle, onAccion, onAgendarManual })
           <div className="w-1 rounded-full shrink-0 bg-gray-300" />
           <div className="flex items-center gap-2 flex-wrap">
             <span className={COL_HORA}>{rangoSlot}</span>
-            <span className="text-xs text-pizarra">⤷ sigue {slot.esAlmuerzo ? "almuerzo" : "ausencia"}</span>
+            <span className="text-xs text-pizarra">⤷ sigue {slot.esPausa ? "pausa" : "ausencia"}</span>
           </div>
         </div>
       );
@@ -373,7 +373,7 @@ function SlotFila({ slot, fecha, abierta, onToggle, onAccion, onAgendarManual })
           <span className={COL_HORA}>{horaCorta(slot.inicioReal)}–{horaCorta(slot.finReal)}</span>
           <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-2">
             <span className="font-bold text-sm text-tinta truncate">{c.clienteNombre}</span>
-            <span className="text-xs text-pizarra whitespace-nowrap">· {c.planSnapshot?.nombre} ({formatDur(slot.duracion)})</span>
+            <span className="text-xs text-pizarra truncate max-w-full">· {c.planSnapshot?.nombre} ({formatDur(slot.duracion)})</span>
           </div>
           <div className="shrink-0 sm:hidden">
             <EstadoBadge estado={c.estado} />
@@ -463,21 +463,31 @@ function SlotFila({ slot, fecha, abierta, onToggle, onAccion, onAgendarManual })
 // Construye la jornada como una lista de franjas fijas de media hora, usando el
 // mismo motor (`jornadaDelDia`) que el agendamiento manual y público, para que
 // lo que aquí se ve como libre/ocupado coincida con lo que se puede agendar.
-// Cada slot queda marcado como libre, cita, ausencia, almuerzo o pasado. Una
+// Cada slot queda marcado como libre, cita, ausencia, pausa o pasado. Una
 // cita/ausencia que abarca varios slots los ocupa todos: el primero muestra el
 // detalle completo y los siguientes quedan como "continuación".
 function buildTimeline(fecha, perfil, citasDia) {
   const jornada = jornadaDelDia({ barbero: perfil, fecha, citas: citasDia });
   if (jornada.tipo !== "laboral") return { tipo: jornada.tipo };
 
-  const { inicioMin, finMin, ocupados, minPermitido } = jornada;
-  const paso = perfil?.horario?.duracionTurnoMin || perfil?.planes?.[0]?.duracion || PASO_MIN;
+  const { inicioMin, finMin, tramos, ocupados, minPermitido } = jornada;
+  // Filas de al menos 30 min (múltiplo del intervalo de inicio) para que la
+  // lista no sea eterna con intervalos cortos y cada fila empiece en una hora
+  // que de verdad se puede agendar.
+  const intervalo = intervaloInicio(perfil);
+  const paso = intervalo * Math.max(1, Math.ceil(30 / intervalo));
 
   const slots = [];
   const vistos = new Set(); // citas/ausencias que abarcan varios slots
 
-  for (let s = inicioMin; s < finMin; s += paso) {
-    const e = Math.min(s + paso, finMin);
+  // Filas de cada tramo de trabajo; entre tramos, una sola fila con la pausa.
+  const filas = [];
+  tramos.forEach((tr, i) => {
+    if (i > 0) filas.push([tramos[i - 1].fin, tr.ini]);
+    for (let s = tr.ini; s < tr.fin; s += paso) filas.push([s, Math.min(s + paso, tr.fin)]);
+  });
+
+  for (const [s, e] of filas) {
     const base = { inicio: minAHhmm(s), fin: minAHhmm(e) };
 
     // Las citas van primero en `ocupados`, así que ganan al pintar si solapan.
@@ -493,7 +503,7 @@ function buildTimeline(fecha, perfil, citasDia) {
         });
       } else {
         slots.push({
-          ...base, tipo: "ausencia", franja: oc.franja, esInicio, esAlmuerzo: oc.tipo === "almuerzo",
+          ...base, tipo: "ausencia", franja: oc.franja, esInicio, esPausa: oc.tipo === "pausa",
           inicioReal: minAHhmm(oc.ini), finReal: minAHhmm(oc.fin),
         });
       }

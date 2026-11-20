@@ -63,7 +63,7 @@ export const PATCH = handler(async (req, { params }) => {
       cita.estado = ESTADO_CITA.RECHAZADA;
       cita.motivoRechazo = motivo || "";
       await cita.save();
-      const link = linkWhatsApp(cita.clienteCelular, mensajeRechazo(cita, barbero));
+      const link = linkWhatsApp(cita.clienteCelular, mensajeRechazo(cita, barbero, { plano: !!plano }));
 
       // Notificación push al cliente informando el rechazo.
       if (cita.clienteCelular) {
@@ -137,9 +137,9 @@ export const PATCH = handler(async (req, { params }) => {
         await enviarPush(
           { ownerRole: ROLES.BARBERO, ownerId: cita.barbero },
           {
-            title: "Cita cancelada por el cliente",
+            title: "Cita cancelada por la clienta",
             body: `${cita.clienteNombre} canceló su cita del ${cita.fecha} a las ${formatearHora12(cita.horaInicio)}. El cupo quedó libre.`,
-            url: "/barbero/panel",
+            url: "/especialista/panel",
             tag: `cancelada-${cita._id}`,
           }
         );
@@ -150,7 +150,7 @@ export const PATCH = handler(async (req, { params }) => {
       if (esBarberoDueno && eraConfirmada && cita.clienteCelular) {
         link = linkWhatsApp(
           cita.clienteCelular,
-          mensajeCancelacion(cita, barbero, { motivo })
+          mensajeCancelacion(cita, barbero, { motivo, plano: !!plano })
         );
 
         // Notificación push al cliente informando la cancelación.
@@ -158,7 +158,7 @@ export const PATCH = handler(async (req, { params }) => {
           { ownerRole: "cliente", clienteCelular: normalizarCelular(cita.clienteCelular) },
           {
             title: "Cita cancelada",
-            body: `Tu cita del ${cita.fecha} a las ${formatearHora12(cita.horaInicio)} fue cancelada por tu profesional.`,
+            body: `Tu cita del ${cita.fecha} a las ${formatearHora12(cita.horaInicio)} fue cancelada por tu ${obtenerMarca(barbero?.marca).textos.profesional}.`,
             url: "/mis-citas",
             tag: `cancelada-${cita._id}`,
           }

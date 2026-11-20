@@ -14,6 +14,9 @@ export function useDialog() {
 // consistente con el estilo de la app. Expone dos ayudas basadas en promesas:
 //   confirmar(opts)   -> Promise<boolean>
 //   pedirMotivo(opts) -> Promise<string|null>  (null = el usuario canceló)
+// y abrirWhatsApp(url): abre WhatsApp en otra pestaña/app. Si el navegador lo
+// bloquea (pasa en iPhone y en la app instalada cuando se abre después de
+// esperar al servidor, sin un toque directo), muestra un botón para abrirlo.
 export default function DialogProvider({ children }) {
   const [estado, setEstado] = useState(null);
   const [motivo, setMotivo] = useState("");
@@ -40,6 +43,20 @@ export default function DialogProvider({ children }) {
     [abrir]
   );
 
+  const abrirWhatsApp = useCallback((url) => {
+    if (!url) return;
+    let ventana = null;
+    try { ventana = window.open(url, "_blank"); } catch { ventana = null; }
+    if (!ventana) {
+      setEstado({
+        tipo: "enlace",
+        url,
+        titulo: "Enviar por WhatsApp",
+        mensaje: "El mensaje ya está listo. Toca el botón para abrir WhatsApp y enviarlo.",
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!estado) return;
     const onKey = (e) => { if (e.key === "Escape") cerrar(null); };
@@ -48,11 +65,11 @@ export default function DialogProvider({ children }) {
   }, [estado, cerrar]);
 
   return (
-    <DialogContext.Provider value={{ confirmar, pedirMotivo }}>
+    <DialogContext.Provider value={{ confirmar, pedirMotivo, abrirWhatsApp }}>
       {children}
       {estado && (
         <div
-          className="fixed inset-0 z-[100] grid place-items-center p-4 bg-black/60 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/60 backdrop-blur-[2px]"
           onClick={() => cerrar(null)}
         >
           <div
@@ -77,6 +94,23 @@ export default function DialogProvider({ children }) {
               />
             )}
 
+            {estado.tipo === "enlace" ? (
+              <div className="mt-5 flex gap-2 justify-end">
+                <button type="button" className="btn-outline text-sm py-2" onClick={() => cerrar(null)}>
+                  Cerrar
+                </button>
+                <a
+                  href={estado.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-wa text-sm py-2"
+                  onClick={() => cerrar(null)}
+                  autoFocus
+                >
+                  Abrir WhatsApp
+                </a>
+              </div>
+            ) : (
             <div className="mt-5 flex gap-2 justify-end">
               <button
                 type="button"
@@ -94,6 +128,7 @@ export default function DialogProvider({ children }) {
                 {estado.confirmarLabel || "Aceptar"}
               </button>
             </div>
+            )}
           </div>
         </div>
       )}

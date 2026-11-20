@@ -28,7 +28,7 @@ export default function LoginBarberoPage() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Error");
       if (d.role !== "barbero") throw new Error(`Esta cuenta no es de ${t.profesional}.`);
-      router.push(`/barbero/panel`);
+      router.push(`/especialista/panel`);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -41,7 +41,7 @@ export default function LoginBarberoPage() {
       <Header><Link href="/" className="hover:text-brand-on-dark">Inicio</Link></Header>
       <main className="mx-auto max-w-sm px-4 py-12">
         <div className="flex justify-center mb-4"><IconoMarca className="w-16 h-16" /></div>
-        <h1 className="font-display text-3xl text-center">Panel del {t.profesional}</h1>
+        <h1 className="font-display text-3xl text-center">Panel de la {t.profesional}</h1>
         <form onSubmit={login} className="card p-6 mt-6 space-y-3">
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div>
@@ -59,7 +59,7 @@ export default function LoginBarberoPage() {
           </div>
           <button className="btn-primary w-full" disabled={enviando}>{enviando ? "Ingresando…" : "Ingresar"}</button>
           <p className="text-center text-sm text-pizarra">
-            ¿No tienes cuenta? <Link href={`/barbero/registro`} className="text-brand-deep font-semibold">Regístrate</Link>
+            ¿No tienes cuenta? Pídele tu acceso a la administración del spa.
           </p>
         </form>
       </main>

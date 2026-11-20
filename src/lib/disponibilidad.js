@@ -48,6 +48,115 @@ export function citasEnConflicto({ citas = [], diasBloqueados = [], franjasBloqu
   });
 }
 
+// ---------------------------------------------------------------------------
+// Horario semanal por día
+//
+// Cada día tiene `activo` y una lista de tramos de trabajo [{ini, fin}]. El
+// hueco entre dos tramos es una pausa (almuerzo, descanso), así cada día puede
+// tener su propio horario y sus propias pausas:
+//   { dia: 1, activo: true, tramos: [{ini:"09:00", fin:"13:00"}, {ini:"14:00", fin:"19:00"}] }
+//
+// Las especialistas que todavía no tienen `horario.semana` guardado usan el
+// formato anterior (apertura/cierre, días laborales y almuerzo global), que se
+// convierte aquí sin tocar la base de datos.
+// ---------------------------------------------------------------------------
+
+export const MAX_TRAMOS_DIA = 3;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function semanaLegada(horario = {}) {
+  const ini = horario.horaInicio || "10:00";
+  const fin = horario.horaFin || "19:00";
+  const dias = horario.diasLaborales || [1, 2, 3, 4, 5, 6];
+  const alm = horario.almuerzo;
+  let tramos = [{ ini, fin }];
+  if (alm && alm.activo && alm.horaInicio && alm.horaFin) {
+    const a = hhmmAMin(alm.horaInicio);
+    const b = hhmmAMin(alm.horaFin);
+    if (b > a && a > hhmmAMin(ini) && b < hhmmAMin(fin)) {
+      tramos = [{ ini, fin: alm.horaInicio }, { ini: alm.horaFin, fin }];
+    }
+  }
+  return [0, 1, 2, 3, 4, 5, 6].map((dia) => ({
+    dia,
+    activo: dias.includes(dia),
+    tramos: tramos.map((t) => ({ ...t })),
+  }));
+}
+
+/**
+ * Devuelve siempre 7 días (índice = día de la semana, 0 = domingo) con
+ * `{ dia, activo, tramos: [{ini, fin}] }`, ordenados y listos para usar.
+ */
+export function semanaDeHorario(horario = {}) {
+  const guardada = Array.isArray(horario?.semana) ? horario.semana : [];
+  if (guardada.length !== 7) return semanaLegada(horario || {});
+  const porDia = {};
+  for (const d of guardada) porDia[d.dia] = d;
+  return [0, 1, 2, 3, 4, 5, 6].map((dia) => {
+    const d = porDia[dia] || { activo: false, tramos: [] };
+    const tramos = (d.tramos || [])
+      .map((t) => ({ ini: t.ini, fin: t.fin }))
+      .sort((a, b) => a.ini.localeCompare(b.ini));
+    return { dia, activo: !!d.activo && tramos.length > 0, tramos };
+  });
+}
+
+/**
+ * Valida y normaliza la semana que envía el panel. Devuelve
+ * `{ semana }` o `{ error }` con un mensaje para la especialista.
+ */
+export function validarSemana(entrada) {
+  if (!Array.isArray(entrada)) return { error: "Horario inválido." };
+  const porDia = {};
+  for (const d of entrada) {
+    const dia = Number(d?.dia);
+    if (!Number.isInteger(dia) || dia < 0 || dia > 6) return { error: "Horario inválido." };
+    porDia[dia] = d;
+  }
+  const semana = [];
+  for (let dia = 0; dia < 7; dia++) {
+    const d = porDia[dia] || {};
+    const activo = !!d.activo;
+    const tramos = (Array.isArray(d.tramos) ? d.tramos : [])
+      .map((t) => ({ ini: String(t?.ini || ""), fin: String(t?.fin || "") }))
+      .sort((a, b) => a.ini.localeCompare(b.ini));
+    if (activo) {
+      const nombre = NOMBRES_DIA[dia];
+      if (tramos.length === 0) return { error: `El ${nombre} no tiene horario.` };
+      if (tramos.length > MAX_TRAMOS_DIA) return { error: `El ${nombre} tiene demasiadas pausas.` };
+      for (let i = 0; i < tramos.length; i++) {
+        const t = tramos[i];
+        if (!HHMM.test(t.ini) || !HHMM.test(t.fin)) return { error: `Revisa las horas del ${nombre}.` };
+        if (t.fin <= t.ini) return { error: `El ${nombre}: la hora final debe ser mayor que la inicial.` };
+        if (i > 0 && t.ini <= tramos[i - 1].fin) {
+          return { error: `El ${nombre}: después de una pausa, la hora de regreso debe ser mayor que la de salida.` };
+        }
+      }
+    }
+    semana.push({ dia, activo, tramos: activo ? tramos : tramos.filter((t) => HHMM.test(t.ini) && HHMM.test(t.fin)) });
+  }
+  if (!semana.some((d) => d.activo)) return { error: "Activa al menos un día de trabajo." };
+  return { semana };
+}
+
+const NOMBRES_DIA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+/**
+ * Citas que quedarían por fuera de un nuevo horario semanal (en un día que ya
+ * no se trabaja, o fuera de los tramos de ese día). Sirve para no dejar citas
+ * agendadas huérfanas al cambiar el horario.
+ */
+export function citasFueraDeSemana({ citas = [], semana }) {
+  return citas.filter((c) => {
+    const d = semana[diaSemanaDeFecha(c.fecha)];
+    if (!d || !d.activo) return true;
+    const ini = hhmmAMin(c.horaInicio);
+    const fin = hhmmAMin(c.horaFin);
+    return !d.tramos.some((t) => ini >= hhmmAMin(t.ini) && fin <= hhmmAMin(t.fin));
+  });
+}
+
 /**
  * Núcleo de disponibilidad y única fuente de verdad de la jornada de un barbero
  * en una fecha. La usan tanto `calcularSlots` (agendamiento manual y público)
@@ -58,25 +167,28 @@ export function citasEnConflicto({ citas = [], diasBloqueados = [], franjasBloqu
  * @param {string} params.fecha    'YYYY-MM-DD'
  * @param {Array}  params.citas    citas ocupadas ese día [{horaInicio, horaFin, ...}]
  * @returns {Object} { tipo: 'noLaboral' | 'bloqueado' | 'laboral', ... }
- *   Para 'laboral' incluye: inicioMin, finMin, ocupados[], minPermitido.
- *   Cada ocupado: { tipo: 'cita'|'ausencia'|'almuerzo', ini, fin, cita?, franja? }.
+ *   Para 'laboral' incluye: inicioMin, finMin, tramos[], ocupados[], minPermitido.
+ *   Cada ocupado: { tipo: 'cita'|'ausencia'|'pausa', ini, fin, cita?, franja? }.
  */
 export function jornadaDelDia({ barbero, fecha, citas = [] }) {
   const horario = barbero.horario || {};
   const dia = diaSemanaDeFecha(fecha);
 
-  // ¿Es día laboral?
-  const diasLaborales = horario.diasLaborales || [1, 2, 3, 4, 5, 6];
-  if (!diasLaborales.includes(dia)) return { tipo: "noLaboral" };
+  // Horario de ese día de la semana (tramos de trabajo).
+  const cfg = semanaDeHorario(horario)[dia];
+  const tramos = (cfg.activo ? cfg.tramos : [])
+    .map((t) => ({ ini: hhmmAMin(t.ini), fin: hhmmAMin(t.fin) }))
+    .filter((t) => t.fin > t.ini);
+  if (tramos.length === 0) return { tipo: "noLaboral" };
 
   // ¿Día completo bloqueado?
   if ((barbero.diasBloqueados || []).includes(fecha)) return { tipo: "bloqueado" };
 
-  const inicioMin = hhmmAMin(horario.horaInicio || "10:00");
-  const finMin = hhmmAMin(horario.horaFin || "19:00");
+  const inicioMin = tramos[0].ini;
+  const finMin = tramos[tramos.length - 1].fin;
 
   // Intervalos ocupados, en orden de prioridad: primero las citas (que ganan al
-  // pintar el calendario si solapan), luego franjas bloqueadas y el almuerzo.
+  // pintar el calendario si solapan), luego franjas bloqueadas y las pausas.
   const ocupados = [];
   for (const c of citas) {
     ocupados.push({ tipo: "cita", ini: hhmmAMin(c.horaInicio), fin: hhmmAMin(c.horaFin), cita: c });
@@ -87,18 +199,16 @@ export function jornadaDelDia({ barbero, fecha, citas = [] }) {
     }
   }
 
-  // Hora de almuerzo: se aplica a todos los días laborales (ya validamos arriba
-  // que la fecha es un día laboral), así que no queda disponible para agendar.
-  const almuerzo = horario.almuerzo;
-  if (almuerzo && almuerzo.activo && almuerzo.horaInicio && almuerzo.horaFin) {
-    const ini = hhmmAMin(almuerzo.horaInicio);
-    const fin = hhmmAMin(almuerzo.horaFin);
+  // Pausas del día: el hueco entre un tramo y el siguiente.
+  for (let i = 1; i < tramos.length; i++) {
+    const ini = tramos[i - 1].fin;
+    const fin = tramos[i].ini;
     if (fin > ini) {
       ocupados.push({
-        tipo: "almuerzo",
+        tipo: "pausa",
         ini,
         fin,
-        franja: { horaInicio: almuerzo.horaInicio, horaFin: almuerzo.horaFin, motivo: "Almuerzo" },
+        franja: { horaInicio: minAHhmm(ini), horaFin: minAHhmm(fin), motivo: "Pausa" },
       });
     }
   }
@@ -111,7 +221,7 @@ export function jornadaDelDia({ barbero, fecha, citas = [] }) {
     minPermitido = Math.max(inicioMin, minutosActualesColombia());
   }
 
-  return { tipo: "laboral", inicioMin, finMin, ocupados, minPermitido };
+  return { tipo: "laboral", inicioMin, finMin, tramos, ocupados, minPermitido };
 }
 
 /**
@@ -123,22 +233,36 @@ export function jornadaDelDia({ barbero, fecha, citas = [] }) {
  * @param {Array}  params.citas    citas ocupadas ese día [{horaInicio, horaFin}]
  * @returns {string[]} lista de horas de inicio 'HH:mm' disponibles
  */
+// Cada cuánto se ofrece una hora de inicio (se guarda en horario.duracionTurnoMin
+// por compatibilidad con los datos existentes).
+export function intervaloInicio(barbero) {
+  const v = Number(barbero?.horario?.duracionTurnoMin);
+  return v >= 5 && v <= 120 ? v : PASO_MIN;
+}
+
 export function calcularSlots({ barbero, fecha, duracion, citas = [] }) {
   const jornada = jornadaDelDia({ barbero, fecha, citas });
   if (jornada.tipo !== "laboral") return [];
 
-  const { inicioMin, finMin, ocupados, minPermitido } = jornada;
-  const dur = Number(duracion) || barbero?.horario?.duracionTurnoMin || barbero?.planes?.[0]?.duracion || PASO_MIN;
-  // El intervalo entre cupos debe avanzar según la duración de la cita (ej. cada 40 min si la cita es de 40 min)
-  const paso = dur;
+  const { tramos, ocupados, minPermitido } = jornada;
+  const dur = Number(duracion) || barbero?.planes?.[0]?.duracion || PASO_MIN;
+  // Intervalo de inicio: cada cuánto se ofrece una hora para empezar (15, 30…
+  // min). Es independiente de la duración del servicio: un servicio de 90 min
+  // puede empezar a las 9:00 o a las 9:30, y el siguiente hueco libre queda
+  // disponible justo cuando termina la cita anterior.
+  const paso = intervaloInicio(barbero);
 
   const slots = [];
-  for (let t = inicioMin; t + dur <= finMin; t += paso) {
-    if (t < minPermitido) continue;
-    const fin = t + dur;
-    const chocaConOcupado = ocupados.some((o) => seSolapa(t, fin, o.ini, o.fin));
-    if (!chocaConOcupado) {
-      slots.push(minAHhmm(t));
+  // Se recorre cada tramo por separado: un servicio nunca cruza una pausa ni
+  // empieza desalineado al regresar de ella.
+  for (const tramo of tramos) {
+    for (let t = tramo.ini; t + dur <= tramo.fin; t += paso) {
+      if (t < minPermitido) continue;
+      const fin = t + dur;
+      const chocaConOcupado = ocupados.some((o) => seSolapa(t, fin, o.ini, o.fin));
+      if (!chocaConOcupado) {
+        slots.push(minAHhmm(t));
+      }
     }
   }
   return slots;

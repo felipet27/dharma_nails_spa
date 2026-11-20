@@ -7,6 +7,7 @@ import { useBrand } from "@/components/BrandProvider";
 import { capitalizar, CONTACTO } from "@/lib/brands";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import BotonInstalarApp from "@/components/BotonInstalarApp";
+import ContactoAdmin from "@/components/ContactoAdmin";
 
 function HeroTitulo({ texto }) {
   const resaltado = "sin filas";
@@ -42,7 +43,7 @@ export default function HomeMarcaPage() {
     <div className="min-h-screen">
       <Header>
         <Link href={`/mis-citas`} className="hover:text-brand-on-dark">Mis citas</Link>
-        <Link href={`/barbero/login`} className="hover:text-brand-on-dark">Soy {t.profesional}</Link>
+        <Link href={`/especialista/login`} className="hover:text-brand-on-dark">Soy {t.profesional}</Link>
         <Link href={`/admin/login`} className="text-white/40 hover:text-white/70 hidden sm:inline-flex text-xs">Admin</Link>
       </Header>
 
@@ -59,7 +60,7 @@ export default function HomeMarcaPage() {
               {t.descHero}
             </p>
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <a href="#barberos" className="btn-accent w-full sm:w-auto justify-center">{t.cta}</a>
+              <a href="#especialistas" className="btn-accent w-full sm:w-auto justify-center">{t.cta}</a>
               <Link href={`/mis-citas`} className="btn-outline border-white text-white hover:bg-white hover:text-tinta w-full sm:w-auto justify-center">
                 Ver mi cita
               </Link>
@@ -77,11 +78,11 @@ export default function HomeMarcaPage() {
         <div className="h-1 sm:h-1.5 brand-stripe" />
       </section>
 
-      <section id="barberos" className="mx-auto max-w-6xl px-4 py-12">
+      <section id="especialistas" className="mx-auto max-w-6xl px-4 py-12">
         <h2 className="font-display text-3xl flex items-center gap-2">
           <IconoMarca className="w-8 h-8" /> {t.escogeProfesional}
         </h2>
-        <p className="text-pizarra mt-1">Estos son los {t.profesionales} de {marca.nombre}. {t.ctaEscoger}.</p>
+        <p className="text-pizarra mt-1">Estas son las {t.profesionales} de {marca.nombre}. {t.ctaEscoger}.</p>
 
         {cargando ? (
           <p className="mt-8 text-pizarra">Cargando {t.profesionales}…</p>
@@ -109,8 +110,10 @@ export default function HomeMarcaPage() {
                   <div className="absolute inset-0 brand-stripe" />
                 )}
                 {!b.foto && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 text-white grid place-items-center font-display text-3xl sm:text-4xl">
+                  // Sin foto: en pantallas grandes la inicial va centrada; en
+                  // celular va junto al nombre (abajo) para no cruzarse con él.
+                  <div className="absolute inset-0 hidden sm:flex items-center justify-center">
+                    <span className="w-20 h-20 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 text-white grid place-items-center font-display text-4xl">
                       {b.nombre?.[0]?.toUpperCase()}
                     </span>
                   </div>
@@ -118,14 +121,25 @@ export default function HomeMarcaPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
                 <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ring-2 ring-inset ring-brand/60" />
                 <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+                  {!b.foto && (
+                    <span className="sm:hidden mb-2 w-10 h-10 rounded-full bg-black/50 border border-white/20 text-white grid place-items-center font-display text-xl">
+                      {b.nombre?.[0]?.toUpperCase()}
+                    </span>
+                  )}
                   <h3 className="font-display text-white text-lg sm:text-xl leading-tight">{b.nombre}</h3>
-                  <p className="text-white/50 text-xs mb-2">{capitalizar(t.profesional)} en {marca.nombre}</p>
+                  <p className="text-white/50 text-xs mb-2 truncate">{capitalizar(t.profesional)} en {marca.nombre}</p>
                   <div className="flex flex-wrap gap-1 mb-2 sm:mb-3">
-                    {b.planes.map((p) => (
+                    {/* Con muchos servicios se muestran los 3 primeros y "+N". */}
+                    {b.planes.slice(0, 3).map((p) => (
                       <span key={p.key} className="text-[10px] sm:text-xs font-semibold bg-white/15 text-white rounded-full px-2 py-0.5 backdrop-blur-sm">
                         {p.nombre}
                       </span>
                     ))}
+                    {b.planes.length > 3 && (
+                      <span className="text-[10px] sm:text-xs font-semibold bg-white/25 text-white rounded-full px-2 py-0.5 backdrop-blur-sm">
+                        +{b.planes.length - 3}
+                      </span>
+                    )}
                   </div>
                   <span className="text-brand-on-dark font-bold text-sm group-hover:text-white transition-colors duration-200">
                     Agendar →
@@ -143,10 +157,15 @@ export default function HomeMarcaPage() {
           <span>{marca.nombre} · © {new Date().getFullYear()}</span>
           <div className="flex flex-wrap justify-center sm:justify-end items-center gap-x-4 gap-y-2">
             <BotonInstalarApp className="inline-flex items-center font-semibold text-white hover:text-brand-on-dark" />
-            <a href={CONTACTO.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-white">Instagram</a>
-            <a href={waSpa} target="_blank" rel="noopener noreferrer" className="hover:text-white">WhatsApp</a>
-            <Link href={`/barbero/registro`} className="hover:text-white">Soy {t.profesional}</Link>
-            <Link href={`/admin/login`} className="hover:text-white">Administrador</Link>
+            <a href={CONTACTO.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-white py-1.5">Instagram</a>
+            <a href={waSpa} target="_blank" rel="noopener noreferrer" className="hover:text-white py-1.5">WhatsApp</a>
+            <Link href={`/especialista/login`} className="hover:text-white py-1.5">Soy {t.profesional}</Link>
+            <Link href={`/admin/login`} className="hover:text-white py-1.5">Administrador</Link>
+          </div>
+        </div>
+        <div className="border-t border-white/10">
+          <div className="mx-auto max-w-6xl px-4 py-3 text-center text-xs text-white/50">
+            <ContactoAdmin className="hover:text-white inline-block py-1.5" />
           </div>
         </div>
       </footer>

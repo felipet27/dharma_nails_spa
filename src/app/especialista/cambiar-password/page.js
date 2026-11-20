@@ -18,7 +18,7 @@ export default function CambiarPasswordPage() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.session || d.session.role !== "barbero") {
-          router.replace(`/barbero/login`);
+          router.replace(`/especialista/login`);
           return;
         }
         setEsTemp(d.session.passwordTemporal === true);
@@ -41,7 +41,7 @@ export default function CambiarPasswordPage() {
     setEnviando(false);
 
     if (res.ok) {
-      router.replace(`/barbero/panel`);
+      router.replace(`/especialista/panel`);
     } else {
       const d = await res.json();
       setError(d.error || "Error al cambiar la contraseña");

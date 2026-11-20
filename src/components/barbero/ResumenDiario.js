@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { formatoCOP } from "@/lib/constants";
 import { fechaLocalHoy } from "@/lib/disponibilidad";
-import { Silla, Tijeras } from "@/components/Icons";
+import { Esmalte } from "@/components/Icons";
 import GraficoECharts from "@/components/graficos/GraficoECharts";
 
 const COLOR_METODO = {
@@ -175,7 +175,7 @@ export default function ResumenDiario() {
             )}
           </h2>
           <p className="text-xs sm:text-sm text-pizarra mt-0.5">
-            Tu resumen de hoy: cómo va la plata y los turnos
+            Tu resumen de hoy: ingresos y citas del día
           </p>
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function ResumenDiario() {
                   Ritmo de hoy
                 </span>
                 <span className="badge bg-neutral-100 text-tinta font-semibold">
-                  Llevás {data.estados?.completadas || 0} de {data.totalCitas} turnos
+                  Llevas {data.estados?.completadas || 0} de {data.totalCitas} citas
                 </span>
               </div>
               <span className="font-display text-lg text-tinta font-bold">
@@ -251,7 +251,7 @@ export default function ResumenDiario() {
               {/* Montos cobrados */}
               <div className="lg:w-60 shrink-0">
                 <p className="text-xs uppercase tracking-wider font-semibold text-pizarra">
-                  Ya en el bolsillo
+                  Ya recibido
                 </p>
                 <p className="text-2xl sm:text-3xl font-display text-emerald-600 font-bold mt-1">
                   {formatoCOP(data.ingresosCobrados)}
@@ -311,7 +311,7 @@ export default function ResumenDiario() {
                 </p>
               </div>
               <p className="mt-3 pt-2 border-t border-black/5 text-[11px] text-pizarra">
-                De <strong className="text-tinta">{data.estados?.confirmadas || 0}</strong> cliente(s) que falta(n) hoy
+                De <strong className="text-tinta">{data.estados?.confirmadas || 0}</strong> clienta(s) que falta(n) hoy
               </p>
             </div>
 
@@ -319,7 +319,7 @@ export default function ResumenDiario() {
             <div className="card p-4 border-l-4 border-l-brand-deep flex flex-col justify-between">
               <div>
                 <p className="text-xs uppercase tracking-wider font-semibold text-pizarra">
-                  Promedio por cliente
+                  Promedio por clienta
                 </p>
                 <p className="text-2xl sm:text-3xl font-display text-brand-deep font-bold mt-1">
                   {formatoCOP(data.ticketPromedio)}
@@ -327,8 +327,8 @@ export default function ResumenDiario() {
               </div>
               <p className="mt-3 pt-2 border-t border-black/5 text-[11px] text-pizarra">
                 {data.estados?.completadas > 0
-                  ? "Te está dejando cada cliente hoy"
-                  : "Estimado para los turnos de hoy"}
+                  ? "Ingreso promedio por clienta hoy"
+                  : "Estimado para las citas de hoy"}
               </p>
             </div>
 
@@ -339,7 +339,7 @@ export default function ResumenDiario() {
                   <p className="text-xs uppercase tracking-wider font-semibold text-pizarra">
                     Tiempo atendiendo
                   </p>
-                  <Tijeras className="w-4 h-4 text-brand opacity-80" />
+                  <Esmalte className="w-4 h-4 text-brand opacity-80" />
                 </div>
                 <p className="text-2xl sm:text-3xl font-display text-tinta font-bold mt-1">
                   {formatearMinutos(data.productividad?.minutosTrabajados)}
@@ -357,7 +357,7 @@ export default function ResumenDiario() {
               <div>
                 <h3 className="font-display text-lg font-bold">¿Por dónde te pagaron?</h3>
                 <p className="text-xs text-pizarra">
-                  La plata en efectivo en mano vs transferencias (Nequi, Daviplata, etc.)
+                  El efectivo recibido vs transferencias (Nequi, Daviplata, etc.)
                 </p>
               </div>
               <span className="badge bg-neutral-100 text-pizarra text-xs">
@@ -390,7 +390,7 @@ export default function ResumenDiario() {
                           </span>
                         </div>
                         <span className="text-xs text-pizarra">
-                          {m.cantidad} turno{m.cantidad !== 1 ? "s" : ""}
+                          {m.cantidad} cita{m.cantidad !== 1 ? "s" : ""}
                         </span>
                       </div>
 
@@ -444,18 +444,24 @@ export default function ResumenDiario() {
               <div>
                 <h3 className="font-display text-lg font-bold">Lo que más salió hoy</h3>
                 <p className="text-xs text-pizarra">
-                  Cómo se movieron los planes y servicios
+                  Cómo se movieron los servicios
                 </p>
               </div>
-              <Tijeras className="w-5 h-5 text-pizarra" />
+              <Esmalte className="w-5 h-5 text-pizarra" />
             </div>
 
             <div className="space-y-3">
-              {[
-                { key: "bronce", nombre: "Plan Bronce", color: "bg-amber-600" },
-                { key: "plata", nombre: "Plan Plata", color: "bg-slate-400" },
-                { key: "oro", nombre: "Plan Oro", color: "bg-yellow-500" },
-              ].map((p) => {
+              {Object.keys(data.desglose || {}).length === 0 && (
+                <p className="text-sm text-pizarra text-center py-2">Todavía no hay citas este día.</p>
+              )}
+              {Object.entries(data.desglose || {})
+                .sort((a, b) => b[1].cantidad - a[1].cantidad || b[1].ingresos - a[1].ingresos)
+                .map(([key], i) => ({
+                  key,
+                  nombre: data.nombresPlanes?.[key] || "Servicio",
+                  color: COLORES_SERVICIO[i % COLORES_SERVICIO.length],
+                }))
+              .map((p) => {
                 const item = data.desglose?.[p.key] || {
                   cantidad: 0,
                   completadas: 0,
@@ -511,3 +517,15 @@ export default function ResumenDiario() {
     </div>
   );
 }
+
+// Colores para la barra de cada servicio (se asignan por orden de ventas).
+const COLORES_SERVICIO = [
+  "bg-brand",
+  "bg-brand-accent",
+  "bg-emerald-500",
+  "bg-rose-400",
+  "bg-sky-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-slate-400",
+];

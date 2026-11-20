@@ -27,6 +27,14 @@ const nextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  // Las rutas de especialistas antes se llamaban /barbero/...: se redirigen a
+  // /especialista/... para que los enlaces viejos sigan funcionando.
+  async redirects() {
+    return [
+      { source: "/barbero/registro", destination: "/especialista/login", permanent: true },
+      { source: "/barbero/:path*", destination: "/especialista/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { fechaLocalHoy, esFechaPasada, formatearHora12 } from "@/lib/disponibilidad";
 import { esMovil } from "@/lib/dispositivo";
 import { useBrand } from "@/components/BrandProvider";
+import { useDialog } from "@/components/DialogProvider";
 
 export default function CitaManual({ planes, onCreada, prefill }) {
+  const { abrirWhatsApp } = useDialog();
   const { t } = useBrand();
   const activos = (planes || []).filter((p) => p.activo);
   const [clienteNombre, setNombre] = useState("");
@@ -136,10 +138,10 @@ export default function CitaManual({ planes, onCreada, prefill }) {
       if (!res.ok) throw new Error(d.error || "Error");
       // Si se registró celular, abrimos WhatsApp con la confirmación para el
       // cliente (así ambos quedan con el contacto guardado).
-      if (d.linkWhatsApp) window.open(d.linkWhatsApp, "_blank");
+      if (d.linkWhatsApp) abrirWhatsApp(d.linkWhatsApp);
       setMsg(
         d.linkWhatsApp
-          ? "Cita creada y confirmada. Abrimos WhatsApp para enviarle la confirmación al cliente."
+          ? "Cita creada y confirmada. Abrimos WhatsApp para enviarle la confirmación a la clienta."
           : "Cita manual creada y confirmada."
       );
       setNombre(""); setCelular(""); setHora("");
@@ -156,14 +158,14 @@ export default function CitaManual({ planes, onCreada, prefill }) {
 
   return (
     <form onSubmit={crear} className="card p-6 max-w-lg space-y-3">
-      <h2 className="font-display text-xl">Agendar cliente presencial</h2>
-      <p className="text-sm text-pizarra">Para clientes sin celular o que llegan al local. La cita queda confirmada.</p>
+      <h2 className="font-display text-xl">Agendar clienta presencial</h2>
+      <p className="text-sm text-pizarra">Para clientas sin celular o que llegan al spa. La cita queda confirmada.</p>
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {msg && <p className="text-green-700 text-sm">{msg}</p>}
 
       <div ref={contenedorRef} className="relative">
         <div className="flex items-center justify-between mb-1">
-          <label className="label mb-0">Nombre del cliente</label>
+          <label className="label mb-0">Nombre de la clienta</label>
           {soportaContactos && (
             <button
               type="button"
@@ -184,7 +186,7 @@ export default function CitaManual({ planes, onCreada, prefill }) {
           onFocus={() => {
             if (clienteNombre.length >= 2) buscarSugerencias(clienteNombre);
           }}
-          placeholder="Ej: Juan Pérez"
+          placeholder="Ej: Ana María Gómez"
           required
         />
 
@@ -253,7 +255,7 @@ export default function CitaManual({ planes, onCreada, prefill }) {
         </div>
       </div>
       <div>
-        <label className="label">Plan</label>
+        <label className="label">Servicio</label>
         <select className="input" value={planKey} onChange={(e) => setPlanKey(e.target.value)}>
           {activos.map((p) => <option key={p.key} value={p.key}>{p.nombre} ({p.duracion} min)</option>)}
         </select>

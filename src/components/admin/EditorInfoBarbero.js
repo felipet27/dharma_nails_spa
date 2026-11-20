@@ -2,20 +2,17 @@
 
 import { useState } from "react";
 import { OjoAbierto, OjoCerrado } from "@/components/Icons";
-import { DURACIONES_CORTE_OPCIONES } from "@/lib/constants";
+import { INTERVALOS_INICIO_OPCIONES } from "@/lib/constants";
 import { MARCA_DEFAULT, obtenerMarca } from "@/lib/brands";
 
 export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
   const t = obtenerMarca(barbero.marca).textos;
   const [form, setForm] = useState({
     nombre:           barbero.nombre           || "",
-    local:            barbero.local            || "",
     celular:          barbero.celular          || "",
-    ciudad:           barbero.ciudad           || "",
-    direccion:        barbero.direccion        || "",
     email:            barbero.email            || "",
     marca:            MARCA_DEFAULT,
-    duracionTurnoMin: barbero.horario?.duracionTurnoMin || barbero.planes?.[0]?.duracion || 30,
+    duracionTurnoMin: barbero.horario?.duracionTurnoMin || 30,
   });
   const [guardando, setGuardando]     = useState(false);
   const [error, setError]             = useState("");
@@ -33,8 +30,8 @@ export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
 
   async function guardar(e) {
     e.preventDefault();
-    if (!form.nombre.trim() || !form.local.trim() || !form.celular.trim() || !form.ciudad.trim() || !form.email.trim()) {
-      setError("Nombre, local, celular, ciudad y email son obligatorios.");
+    if (!form.nombre.trim() || !form.celular.trim() || !form.email.trim()) {
+      setError("Nombre, celular y email son obligatorios.");
       return;
     }
     setGuardando(true); setError(""); setMsgInfo("");
@@ -59,7 +56,7 @@ export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
       body: JSON.stringify({ password: passTemp.trim() }),
     });
     setAsignando(false);
-    if (res.ok) { setMsgPass(`Contraseña temporal asignada. El ${t.profesional} deberá cambiarla al ingresar.`); setPassTemp(""); }
+    if (res.ok) { setMsgPass(`Contraseña temporal asignada. La ${t.profesional} deberá cambiarla al ingresar.`); setPassTemp(""); }
     else { const d = await res.json(); setErrPass(d.error || "Error al asignar"); }
   }
 
@@ -81,30 +78,14 @@ export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="label">Nombre del {t.profesional}</label>
+                <label className="label">Nombre de la {t.profesional}</label>
                 <input className="input" value={form.nombre} onChange={(e) => set("nombre", e.target.value)} placeholder="Nombre completo" required />
               </div>
               <div>
-                <label className="label">Nombre del local</label>
-                <input className="input" value={form.local} onChange={(e) => set("local", e.target.value)} placeholder="Nombre del negocio" required />
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
                 <label className="label">Celular / WhatsApp</label>
                 <input className="input" type="tel" value={form.celular} onChange={(e) => set("celular", e.target.value)} placeholder="3001234567" required />
-                <p className="text-xs text-pizarra mt-1">Número para comprobantes de clientes.</p>
+                <p className="text-xs text-pizarra mt-1">Número para comprobantes de las clientas.</p>
               </div>
-              <div>
-                <label className="label">Ciudad</label>
-                <input className="input" value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Bogotá" required />
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Dirección</label>
-              <input className="input" value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Cra. 7 # 32-45" />
             </div>
 
             <div>
@@ -112,16 +93,16 @@ export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
               <input className="input" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="correo@email.com" required />
             </div>
 
-            {/* Duración por turno */}
+            {/* Intervalo de horas de inicio */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="label mb-0">⏱️ Tiempo por turno (intervalo)</label>
+                <label className="label mb-0">⏱️ Horas de inicio cada…</label>
                 <span className="text-xs font-bold text-brand-deep bg-brand-soft px-2 py-0.5 rounded border border-brand/20">
-                  {form.duracionTurnoMin} min por turno
+                  cada {form.duracionTurnoMin} min
                 </span>
               </div>
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 mt-1.5">
-                {DURACIONES_CORTE_OPCIONES.map((min) => (
+              <div className="grid grid-cols-5 gap-1.5 mt-1.5">
+                {INTERVALOS_INICIO_OPCIONES.map((min) => (
                   <button
                     key={min}
                     type="button"
@@ -151,7 +132,7 @@ export default function EditorInfoBarbero({ barbero, onClose, onGuardado }) {
         <div className="border-t border-black/10 pt-5">
           <h3 className="font-display text-lg mb-1">Contraseña temporal</h3>
           <p className="text-sm text-pizarra mb-3">
-            Asigna una contraseña provisional. Al ingresar, el {t.profesional} será obligado a cambiarla.
+            Asigna una contraseña provisional. Al ingresar, la {t.profesional} será obligado a cambiarla.
           </p>
 
           {errPass && <p className="text-red-600 text-sm mb-2">{errPass}</p>}

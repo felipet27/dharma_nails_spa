@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import { WhatsAppIcon } from "@/components/Icons";
 import { formatoCOP } from "@/lib/constants";
 import { obtenerMarca } from "@/lib/brands";
+import { linkWhatsApp } from "@/lib/whatsapp";
+import { esMovil } from "@/lib/dispositivo";
 import { useDialog } from "@/components/DialogProvider";
 
 function calcularEstadoSuscripcion(suscripcionVence) {
@@ -133,7 +135,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
   async function toggleEstado(b) {
     const accion = b.estado === "activo" ? "desactivar" : "activar";
     const ok = await confirmar({
-      titulo: `${accion === "desactivar" ? "Pausar" : "Activar"} negocio`,
+      titulo: `${accion === "desactivar" ? "Pausar" : "Activar"} especialista`,
       mensaje: accion === "desactivar"
         ? `¿Pausar a ${b.nombre}? No podrá recibir citas hasta que reactive su suscripción.`
         : `¿Reactivar la cuenta de ${b.nombre}?`,
@@ -195,9 +197,9 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
     const tarifa = formatoCOP(b.tarifaMensual ?? 20000);
 
     const marca = obtenerMarca(b.marca);
-    const msg = `Hola ${primerNombre}, te saludamos de ${marca.nombre}. 👋\n\nTe recordamos que tu mensualidad de la plataforma (${b.local}) vence el ${fechaVenceStr}.\n\n💰 Valor a renovar: ${tarifa}.\n\nPor favor envíanos el comprobante de transferencia para renovar tu mes y mantener tu agenda activa. ¡Muchas gracias! ${marca.textos.emoji}`;
+    const msg = `Hola ${primerNombre}, te saludamos de ${marca.nombre}. 👋\n\nTe recordamos que tu mensualidad de la plataforma vence el ${fechaVenceStr}.\n\n💰 Valor a renovar: ${tarifa}.\n\nPor favor envíanos el comprobante de transferencia para renovar tu mes y mantener tu agenda activa. ¡Muchas gracias! ${marca.textos.emoji}`;
 
-    return `https://wa.me/${celLimpio}?text=${encodeURIComponent(msg)}`;
+    return linkWhatsApp(celLimpio, msg, { plano: !esMovil() });
   }
 
   return (
@@ -205,7 +207,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
       {/* 1. Tarjetas de Resumen Global (KPIs) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card p-4 border border-stone-200 bg-white">
-          <p className="text-xs font-semibold uppercase tracking-wider text-pizarra">Negocios activos</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-pizarra">Especialistas activas</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="font-display text-3xl text-tinta">{kpis.totalActivos}</span>
             <span className="text-xs text-emerald-600 font-medium">en plataforma</span>
@@ -219,7 +221,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
           <p className="text-xs font-semibold uppercase tracking-wider text-amber-900">Por Cobrar / Vencidos</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="font-display text-3xl text-amber-900">{kpis.porCobrar}</span>
-            <span className="text-xs text-amber-700 font-medium">negocios</span>
+            <span className="text-xs text-amber-700 font-medium">especialistas</span>
           </div>
           <p className="text-xs text-amber-800/80 mt-1">
             {kpis.porVencer} por vencer en ≤5 días · {kpis.vencidos} ya vencidos
@@ -282,7 +284,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
           <input
             type="text"
             className="input text-xs py-1.5 pl-3 pr-8 w-full sm:w-64"
-            placeholder="Buscar negocio, local o tel..."
+            placeholder="Buscar especialista o teléfono..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -297,10 +299,10 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
         </div>
       </div>
 
-      {/* 3. Listado de Barberos */}
+      {/* 3. Listado de especialistas */}
       {barberosFiltrados.length === 0 ? (
         <div className="card p-8 text-center text-pizarra">
-          No hay negocios que coincidan con los filtros actuales.
+          No hay especialistas que coincidan con los filtros actuales.
         </div>
       ) : (
         <div className="space-y-3">
@@ -328,7 +330,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
                 <div className="flex justify-between items-start gap-3 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-display text-lg leading-tight text-tinta">{b.local}</h3>
+                      <h3 className="font-display text-lg leading-tight text-tinta">{b.nombre}</h3>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${estadoSusc.color}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${estadoSusc.dot}`} />
                         {estadoSusc.label}
@@ -340,7 +342,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
                       )}
                     </div>
                     <p className="text-sm text-pizarra mt-0.5">
-                      {b.nombre} · {b.ciudad} · 📱 {b.celular}
+                      📱 {b.celular}
                     </p>
 
                     {/* Metadatos de suscripción */}
@@ -439,7 +441,7 @@ export default function ControlSuscripciones({ barberos = [], onActualizar }) {
           >
             <h2 className="font-display text-lg text-tinta">Ajustar Suscripción</h2>
             <p className="text-xs text-pizarra">
-              {editandoBarbero.local} ({editandoBarbero.nombre})
+              {editandoBarbero.nombre}
             </p>
 
             <form onSubmit={guardarEdicion} className="space-y-3">

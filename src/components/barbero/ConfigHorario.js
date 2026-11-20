@@ -1,19 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { DIAS_SEMANA, DURACIONES_CORTE_OPCIONES } from "@/lib/constants";
-import { fechaLocalHoy, esFechaPasada, formatearHora12, hhmmAMin, minAHhmm } from "@/lib/disponibilidad";
+import { DIAS_SEMANA, INTERVALOS_INICIO_OPCIONES } from "@/lib/constants";
+import {
+  fechaLocalHoy,
+  esFechaPasada,
+  formatearHora12,
+  hhmmAMin,
+  minAHhmm,
+  semanaDeHorario,
+  MAX_TRAMOS_DIA,
+} from "@/lib/disponibilidad";
 import { linkWhatsApp } from "@/lib/whatsapp";
+import { esMovil } from "@/lib/dispositivo";
 import { obtenerMarca } from "@/lib/brands";
 
 export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
-  const [horaInicio, setHoraInicio] = useState(perfil.horario?.horaInicio || "10:00");
-  const [horaFin, setHoraFin] = useState(perfil.horario?.horaFin || "19:00");
-  const [dias, setDias] = useState(perfil.horario?.diasLaborales || [1, 2, 3, 4, 5, 6]);
+  // Horario por día: 7 entradas (índice = día, 0 = domingo) con sus tramos.
+  const [semana, setSemana] = useState(() => semanaDeHorario(perfil.horario));
+  const [copiarDesde, setCopiarDesde] = useState(1);
   const [duracionTurnoMin, setDuracionTurnoMin] = useState(perfil.horario?.duracionTurnoMin || 30);
-  const [almuerzoActivo, setAlmuerzoActivo] = useState(perfil.horario?.almuerzo?.activo || false);
-  const [almuerzoIni, setAlmuerzoIni] = useState(perfil.horario?.almuerzo?.horaInicio || "13:00");
-  const [almuerzoFin, setAlmuerzoFin] = useState(perfil.horario?.almuerzo?.horaFin || "14:00");
   const [ventana, setVentana] = useState(perfil.ventanaCancelacionHoras ?? 24);
   const [diasBloqueados, setDiasBloqueados] = useState(perfil.diasBloqueados || []);
   const [franjas, setFranjas] = useState(perfil.franjasBloqueadas || []);
@@ -30,8 +36,64 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
   const [conflictos, setConflictos] = useState([]);
   const [ausenciaMsg, setAusenciaMsg] = useState("");
 
-  function toggleDia(d) {
-    setDias((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
+  const diasActivos = ORDEN_DIAS.filter((d) => semana[d].activo);
+  const minutosSemana = diasActivos.reduce((acc, d) => acc + minutosDia(semana[d]), 0);
+  const ejemploInicio = (() => {
+    const d = diasActivos.find((x) => !errorDia(semana[x]));
+    if (d == null) return null;
+    const t = semana[d].tramos[0];
+    const horas = [];
+    for (let m = hhmmAMin(t.ini); m < hhmmAMin(t.fin) && horas.length < 4; m += duracionTurnoMin) horas.push(minAHhmm(m));
+    return { dia: d, horas };
+  })();
+
+  function setDia(dia, cambios) {
+    setSemana((prev) => prev.map((d) => (d.dia === dia ? { ...d, ...cambios } : d)));
+  }
+  function toggleActivo(dia) {
+    const d = semana[dia];
+    if (d.activo) { setDia(dia, { activo: false }); return; }
+    // Al activar un día sin horario, se toma el de otro día activo como base.
+    const base = diasActivos.length ? semana[diasActivos[0]].tramos : [{ ini: "09:00", fin: "18:00" }];
+    setDia(dia, { activo: true, tramos: d.tramos.length ? d.tramos : base.map((t) => ({ ...t })) });
+  }
+  function setTramo(dia, i, campo, valor) {
+    setDia(dia, { tramos: semana[dia].tramos.map((t, k) => (k === i ? { ...t, [campo]: valor } : t)) });
+  }
+  // Parte el tramo más largo del día en dos, con una pausa de 1 hora en medio
+  // (o de 30 min si el tramo es corto). Luego la especialista ajusta las horas.
+  function agregarPausa(dia) {
+    const tramos = semana[dia].tramos;
+    let idx = 0;
+    tramos.forEach((t, i) => {
+      if (hhmmAMin(t.fin) - hhmmAMin(t.ini) > hhmmAMin(tramos[idx].fin) - hhmmAMin(tramos[idx].ini)) idx = i;
+    });
+    const ini = hhmmAMin(tramos[idx].ini);
+    const fin = hhmmAMin(tramos[idx].fin);
+    const largo = fin - ini;
+    const pausa = largo >= 180 ? 60 : 30;
+    if (largo < pausa + 60) { setMsg(`El ${DIAS_SEMANA[dia]} es muy corto para agregar una pausa.`); return; }
+    let pIni = ini + Math.floor((largo - pausa) / 2 / 30) * 30;
+    if (pIni <= ini) pIni = ini + 30;
+    const nuevos = [
+      ...tramos.slice(0, idx),
+      { ini: tramos[idx].ini, fin: minAHhmm(pIni) },
+      { ini: minAHhmm(pIni + pausa), fin: tramos[idx].fin },
+      ...tramos.slice(idx + 1),
+    ];
+    setMsg("");
+    setDia(dia, { tramos: nuevos });
+  }
+  // Quitar la pausa i une el tramo anterior con el siguiente.
+  function quitarPausa(dia, i) {
+    const t = semana[dia].tramos;
+    const unido = { ini: t[i - 1].ini, fin: t[i].fin };
+    setDia(dia, { tramos: [...t.slice(0, i - 1), unido, ...t.slice(i + 1)] });
+  }
+  function copiarATodos(origen) {
+    const tramos = semana[origen].tramos;
+    setSemana((prev) => prev.map((d) => (d.activo ? { ...d, tramos: tramos.map((t) => ({ ...t })) } : d)));
+    setMsg(`Horario del ${DIAS_SEMANA[origen]} copiado. Recuerda guardar los cambios.`);
   }
   function elegirFechaBloqueo(valor) {
     if (esFechaPasada(valor)) { setAusenciaMsg("No puedes bloquear una fecha que ya pasó."); return; }
@@ -117,21 +179,17 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
   }
 
   async function guardar() {
-    if (almuerzoActivo && almuerzoIni >= almuerzoFin) {
-      setMsg("La hora de fin del almuerzo debe ser mayor que la de inicio.");
-      return;
-    }
+    if (diasActivos.length === 0) { setMsg("Activa al menos un día de trabajo."); return; }
+    const conError = diasActivos.find((d) => errorDia(semana[d]));
+    if (conError != null) { setMsg(`Revisa el horario del ${DIAS_SEMANA[conError]}.`); return; }
     setGuardando(true); setMsg("");
     const res = await fetch("/api/barbero/perfil", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         horario: {
-          horaInicio,
-          horaFin,
-          diasLaborales: dias,
+          semana,
           duracionTurnoMin: Number(duracionTurnoMin),
-          almuerzo: { activo: almuerzoActivo, horaInicio: almuerzoIni, horaFin: almuerzoFin },
         },
         ventanaCancelacionHoras: Number(ventana),
         diasBloqueados,
@@ -146,7 +204,8 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
     if (res.status === 409 && (data.conflictos || []).length) {
       setConflictos(data.conflictos);
       setMsg("");
-      setAusenciaMsg("🚫 No se pudo bloquear: hay citas agendadas en ese tiempo.");
+      setAusenciaMsg("");
+      setMsg(data.error || "No se pudo guardar: hay citas agendadas en ese tiempo.");
       return;
     }
     if (res.ok) {
@@ -154,7 +213,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
       setConflictos([]);
       onGuardado?.();
     } else {
-      setMsg("Error al guardar");
+      setMsg(data.error || "Error al guardar");
     }
   }
 
@@ -179,7 +238,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
             {foto && (
               <button type="button" onClick={() => setFoto("")} className="ml-2 text-sm text-red-600 font-semibold">Quitar</button>
             )}
-            <p className="text-xs text-pizarra mt-1">Esta es la foto que ven tus clientes.</p>
+            <p className="text-xs text-pizarra mt-1">Esta es la foto que ven tus clientas.</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-3 gap-3">
@@ -199,53 +258,145 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
       </section>
 
       <section className="card p-6 space-y-5">
-        <h2 className="font-display text-xl">Horario laboral</h2>
+        <h2 className="font-display text-xl">Horario de atención</h2>
 
         {/* Resumen visual */}
         <div className="rounded-xl bg-crema border border-black/10 px-4 py-3 flex items-center gap-3">
           <span className="text-2xl">🕐</span>
           <div className="text-sm leading-snug">
             <p>
-              Atendés de{" "}
-              <span className="font-bold text-brand-deep">{hora12simple(horaInicio)}</span>
-              {" "}a{" "}
-              <span className="font-bold text-brand-deep">{hora12simple(horaFin)}</span>
-              {" "}·{" "}
-              <span className="font-semibold">{duracionJornada(horaInicio, horaFin)} horas al día</span>
+              {diasActivos.length === 0
+                ? "⚠️ Ningún día activo"
+                : <>Atiendes <b className="text-brand-deep">{diasActivos.length} día{diasActivos.length !== 1 ? "s" : ""}</b> a la semana · <b className="text-brand-deep">{formatoHoras(minutosSemana)}</b> en total</>}
             </p>
-            <p className="text-pizarra mt-0.5">
-              {dias.length === 0
-                ? "⚠️ Ningún día seleccionado"
-                : `${dias.length} día${dias.length !== 1 ? "s" : ""} a la semana`}
-            </p>
+            <p className="text-pizarra mt-0.5">Cada día puede tener su propio horario y sus pausas.</p>
           </div>
         </div>
 
-        {/* Hora apertura / cierre */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">🟢 Apertura</label>
-            <input type="time" className="input" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">🔴 Cierre</label>
-            <input type="time" className="input" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} />
-          </div>
+        {/* Horario por día */}
+        <div className="space-y-2">
+          {ORDEN_DIAS.map((dia) => {
+            const d = semana[dia];
+            const error = d.activo ? errorDia(d) : "";
+            return (
+              <div
+                key={dia}
+                className={`rounded-xl border p-2.5 sm:p-3 transition ${d.activo ? "border-brand/30 bg-white" : "border-linea bg-gray-50"}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none py-1 flex-1">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 accent-brand-deep"
+                      checked={d.activo}
+                      onChange={() => toggleActivo(dia)}
+                    />
+                    <span className={`font-semibold capitalize ${d.activo ? "text-tinta" : "text-pizarra"}`}>{DIAS_SEMANA[dia]}</span>
+                  </label>
+                  <span className="text-xs text-pizarra">
+                    {d.activo ? (error ? "" : formatoHoras(minutosDia(d))) : "Descanso"}
+                  </span>
+                </div>
+
+                {d.activo && (
+                  <div className="mt-2.5 space-y-2 sm:pl-7">
+                    {d.tramos.map((t, i) => (
+                      <div key={i} className="space-y-2">
+                        {i > 0 && (
+                          <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-900">
+                            <span>☕ Pausa</span>
+                            <b className="flex-1">
+                              {d.tramos[i - 1].fin < t.ini
+                                ? `${hora12simple(d.tramos[i - 1].fin)} – ${hora12simple(t.ini)}`
+                                : "—"}
+                            </b>
+                            <button
+                              type="button"
+                              onClick={() => quitarPausa(dia, i)}
+                              className="text-red-500 hover:text-red-700 font-bold text-base leading-none"
+                              aria-label="Quitar pausa"
+                              title="Quitar pausa"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )}
+                        {/* Grid con columnas que pueden encogerse: en celulares de
+                            320 px las dos horas caben sin desbordar. */}
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-2">
+                          <input
+                            type="time"
+                            className="input py-2 px-2 sm:px-3 min-w-0 w-full"
+                            value={t.ini}
+                            onChange={(e) => setTramo(dia, i, "ini", e.target.value)}
+                            aria-label={`${DIAS_SEMANA[dia]}: ${i === 0 ? "entrada" : "regreso de la pausa"}`}
+                          />
+                          <span className="text-pizarra text-sm shrink-0">a</span>
+                          <input
+                            type="time"
+                            className="input py-2 px-2 sm:px-3 min-w-0 w-full"
+                            value={t.fin}
+                            onChange={(e) => setTramo(dia, i, "fin", e.target.value)}
+                            aria-label={`${DIAS_SEMANA[dia]}: ${i === d.tramos.length - 1 ? "salida" : "inicio de la pausa"}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {error && <p className="text-xs text-red-600">⚠️ {error}</p>}
+                    {d.tramos.length < MAX_TRAMOS_DIA && (
+                      <button
+                        type="button"
+                        onClick={() => agregarPausa(dia)}
+                        className="text-xs font-semibold text-brand-deep hover:underline py-2"
+                      >
+                        + Agregar pausa (almuerzo, descanso…)
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Tiempo por turno */}
+        {/* Copiar horario */}
+        {diasActivos.length > 1 && (
+          <div className="rounded-xl border border-black/10 p-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-pizarra">Copiar el horario del</span>
+            <select
+              className="input py-1.5 w-auto"
+              value={diasActivos.includes(copiarDesde) ? copiarDesde : diasActivos[0]}
+              onChange={(e) => setCopiarDesde(Number(e.target.value))}
+            >
+              {ORDEN_DIAS.filter((d) => semana[d].activo).map((d) => (
+                <option key={d} value={d}>{DIAS_SEMANA[d]}</option>
+              ))}
+            </select>
+            <span className="text-pizarra">a los demás días que trabajas</span>
+            <button
+              type="button"
+              className="btn-outline text-sm py-1.5"
+              onClick={() => copiarATodos(diasActivos.includes(copiarDesde) ? copiarDesde : diasActivos[0])}
+            >
+              Copiar
+            </button>
+          </div>
+        )}
+
+        {/* Intervalo de horas de inicio */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="label mb-0">⏱️ Tiempo por turno</label>
+            <label className="label mb-0">⏱️ Horas de inicio cada…</label>
             <span className="text-xs font-bold text-brand-deep bg-brand-soft px-2 py-0.5 rounded border border-brand/20">
-              {duracionTurnoMin} minutos por cliente
+              cada {duracionTurnoMin} min
             </span>
           </div>
           <p className="text-xs text-pizarra mb-2">
-            Elige cuánto tardas en cada servicio. Tu agenda se organizará en bloques exactos de este tiempo:
+            Cada cuánto les ofrecemos a tus clientas una hora para empezar. Cada servicio ocupa su propia duración
+            (la que está configurada en el servicio) y, al terminar una cita, la siguiente hora queda libre.
           </p>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
-            {DURACIONES_CORTE_OPCIONES.map((min) => (
+          <div className="grid grid-cols-5 gap-1.5">
+            {INTERVALOS_INICIO_OPCIONES.map((min) => (
               <button
                 key={min}
                 type="button"
@@ -256,81 +407,21 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
                     : "border-gray-200 text-pizarra hover:border-tinta hover:text-tinta bg-white"
                 }`}
               >
-                {min}m
+                {min} min
               </button>
             ))}
           </div>
-          {horaInicio && (
+          {ejemploInicio && (
             <p className="text-xs text-pizarra mt-2 bg-crema/70 p-2.5 rounded-lg border border-black/5">
-              📌 Ejemplo: Turno 1: <b>{hora12simple(horaInicio)} – {hora12simple(minAHhmm(hhmmAMin(horaInicio) + duracionTurnoMin))}</b>
-              {" · "}Turno 2: <b>{hora12simple(minAHhmm(hhmmAMin(horaInicio) + duracionTurnoMin))} – {hora12simple(minAHhmm(hhmmAMin(horaInicio) + duracionTurnoMin * 2))}</b>
+              📌 Ejemplo: el {DIAS_SEMANA[ejemploInicio.dia]} tus clientas verán{" "}
+              <b>{ejemploInicio.horas.map(hora12simple).join(", ")}…</b>
             </p>
-          )}
-        </div>
-
-        {/* Días — grid fijo 7 columnas para que siempre quepan en una fila */}
-        <div>
-          <label className="label">Días que trabajás</label>
-          <div className="grid grid-cols-7 gap-1.5">
-            {DIAS_SEMANA.map((d, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => toggleDia(i)}
-                className={`rounded-lg py-3 text-xs font-bold text-center border transition active:scale-95 ${
-                  dias.includes(i)
-                    ? "bg-brand-deep text-white border-brand-deep"
-                    : "border-linea text-pizarra hover:border-brand-deep hover:text-brand-deep"
-                }`}
-              >
-                {d.slice(0, 2)}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-3 mt-2 text-xs text-pizarra">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-brand-deep inline-block" /> Trabajás</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm border border-gray-300 inline-block" /> Descanso</span>
-          </div>
-        </div>
-
-        {/* Hora de almuerzo — se aplica a todos los días de trabajo */}
-        <div className="rounded-xl border border-black/10 p-4 space-y-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              className="w-4 h-4 accent-brand-deep"
-              checked={almuerzoActivo}
-              onChange={(e) => setAlmuerzoActivo(e.target.checked)}
-            />
-            <span className="font-semibold text-sm">🍽️ Tengo hora de almuerzo</span>
-          </label>
-          {almuerzoActivo && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Desde</label>
-                  <input type="time" className="input" value={almuerzoIni} onChange={(e) => setAlmuerzoIni(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">Hasta</label>
-                  <input type="time" className="input" value={almuerzoFin} onChange={(e) => setAlmuerzoFin(e.target.value)} />
-                </div>
-              </div>
-              {almuerzoIni >= almuerzoFin ? (
-                <p className="text-xs text-red-600">⚠️ La hora de fin debe ser mayor que la de inicio.</p>
-              ) : (
-                <p className="text-xs text-pizarra">
-                  De <b>{hora12simple(almuerzoIni)}</b> a <b>{hora12simple(almuerzoFin)}</b> no podrán agendarte citas.
-                  Aplica a los {dias.length} día{dias.length !== 1 ? "s" : ""} que trabajás.
-                </p>
-              )}
-            </>
           )}
         </div>
 
         {/* Cancelación — explicado en lenguaje claro */}
         <div>
-          <label className="label">¿Hasta cuándo pueden cancelar los clientes?</label>
+          <label className="label">¿Hasta cuándo pueden cancelar tus clientas?</label>
           <div className="flex items-center gap-2 mt-1">
             <input
               type="number"
@@ -342,7 +433,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
             <span className="text-sm text-pizarra">horas antes de la cita</span>
           </div>
           {Number(ventana) === 0 ? (
-            <p className="text-xs text-amber-600 mt-1.5">⚠️ Con 0 horas, los clientes pueden cancelar en cualquier momento, incluso el mismo día.</p>
+            <p className="text-xs text-amber-600 mt-1.5">⚠️ Con 0 horas, tus clientas pueden cancelar en cualquier momento, incluso el mismo día.</p>
           ) : (
             <p className="text-xs text-pizarra mt-1.5">
               Ej: si tiene cita a las 3:00 p.m., puede cancelar hasta las{" "}
@@ -355,7 +446,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
       <section className="card p-6 space-y-4">
         <div>
           <h2 className="font-display text-xl">Ausencias</h2>
-          <p className="text-sm text-pizarra mt-0.5">Bloqueá días completos o franjas de horas en las que no vas a atender. Se guardan al instante y los clientes no podrán agendar en ese tiempo.</p>
+          <p className="text-sm text-pizarra mt-0.5">Bloquea fechas puntuales (días completos o unas horas) en las que no vas a atender. Se guardan al instante y tus clientas no podrán agendar en ese tiempo.</p>
           {ausenciaMsg && (
             <p className={`text-sm font-semibold mt-2 ${ausenciaMsg.startsWith("⚠️") || ausenciaMsg.startsWith("No ") || ausenciaMsg.startsWith("La ") ? "text-red-600" : "text-green-700"}`}>
               {ausenciaMsg}
@@ -450,7 +541,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
       </section>
 
       <section className="card p-6 space-y-3">
-        <h2 className="font-display text-xl">Datos de pago (para tus clientes)</h2>
+        <h2 className="font-display text-xl">Datos de pago (para tus clientas)</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="min-w-0"><label className="label">Nequi</label><input className="input" value={datosPago.nequi || ""} onChange={(e) => setDatosPago({ ...datosPago, nequi: e.target.value })} placeholder="Número Nequi" /></div>
           <div className="min-w-0"><label className="label">Daviplata</label><input className="input" value={datosPago.daviplata || ""} onChange={(e) => setDatosPago({ ...datosPago, daviplata: e.target.value })} placeholder="Número Daviplata" /></div>
@@ -468,7 +559,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
 
       <div className="flex items-center gap-3">
         <button className="btn-primary" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : "Guardar cambios"}</button>
-        {msg && <span className="text-sm font-semibold text-green-700">{msg}</span>}
+        {msg && <span className={`text-sm font-semibold ${msg.includes("✔") || msg.includes("copiado") ? "text-green-700" : "text-red-600"}`}>{msg}</span>}
       </div>
 
       {conflictos.length > 0 && (
@@ -476,9 +567,9 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
           <div className="flex items-start gap-2">
             <span className="text-2xl">🚫</span>
             <div>
-              <h2 className="font-display text-xl">No se pudo bloquear: tienes {conflictos.length} cita{conflictos.length !== 1 ? "s" : ""} agendada{conflictos.length !== 1 ? "s" : ""} en ese tiempo</h2>
+              <h2 className="font-display text-xl">No se pudo guardar: tienes {conflictos.length} cita{conflictos.length !== 1 ? "s" : ""} agendada{conflictos.length !== 1 ? "s" : ""} en ese tiempo</h2>
               <p className="text-sm text-pizarra mt-0.5">
-                No se puede marcar ausencia sobre una cita ya agendada. Primero <b>comunicate con el cliente</b> para reagendar y cancelá la cita desde el calendario; luego vas a poder bloquear ese tiempo.
+                No se puede dejar sin atención un horario con citas ya agendadas. Primero <b>comunícate con la clienta</b> para reagendar y cancela la cita desde el calendario; luego podrás guardar el cambio.
               </p>
             </div>
           </div>
@@ -503,7 +594,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
                   {c.clienteCelular && (
                     <a
                       className="btn-wa text-sm py-1.5"
-                      href={linkWhatsApp(c.clienteCelular, mensajeReagendar(c, perfil))}
+                      href={linkWhatsApp(c.clienteCelular, mensajeReagendar(c, perfil), { plano: !esMovil() })}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -515,7 +606,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
             ))}
           </div>
           <p className="text-xs text-pizarra">
-            Para reagendar, escribile al cliente por WhatsApp y luego cancelá la cita en la pestaña <b>Calendario</b>.
+            Para reagendar, escríbele a la clienta por WhatsApp y luego cancela la cita en la pestaña <b>Calendario</b>.
           </p>
         </section>
       )}
@@ -525,15 +616,29 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
 
 const hora12simple = formatearHora12;
 
-function duracionJornada(inicio, fin) {
-  if (!inicio || !fin) return "?";
-  const [hi, mi] = inicio.split(":").map(Number);
-  const [hf, mf] = fin.split(":").map(Number);
-  const diff = hf * 60 + mf - (hi * 60 + mi);
-  if (diff <= 0) return "?";
-  const horas = Math.floor(diff / 60);
-  const mins = diff % 60;
-  return mins === 0 ? `${horas}` : `${horas}h ${mins}m`;
+// Lunes primero, domingo al final.
+const ORDEN_DIAS = [1, 2, 3, 4, 5, 6, 0];
+
+// Mismo criterio que validarSemana en el servidor, para avisar mientras edita.
+function errorDia(d) {
+  if (!d.tramos.length) return "Agrega un horario.";
+  for (let i = 0; i < d.tramos.length; i++) {
+    const t = d.tramos[i];
+    if (!t.ini || !t.fin) return "Completa las horas.";
+    if (t.fin <= t.ini) return "La hora final debe ser mayor que la inicial.";
+    if (i > 0 && t.ini <= d.tramos[i - 1].fin) return "La hora de regreso de la pausa debe ser mayor que la de salida.";
+  }
+  return "";
+}
+
+function minutosDia(d) {
+  return d.tramos.reduce((acc, t) => acc + Math.max(0, hhmmAMin(t.fin) - hhmmAMin(t.ini)), 0);
+}
+
+function formatoHoras(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 function cancelacionEjemplo(horas) {
@@ -556,14 +661,14 @@ function formatFechaBloq(fechaISO) {
   return new Date(y, m - 1, d).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short" });
 }
 
-// Mensaje de WhatsApp para pedirle al cliente reagendar la cita que impide la ausencia.
+// Mensaje de WhatsApp para pedirle a la clienta reagendar la cita que impide la ausencia.
 function mensajeReagendar(cita, perfil) {
-  const local = perfil?.local || `la ${obtenerMarca(perfil?.marca).textos.negocio}`;
+  const local = perfil?.local || `el ${obtenerMarca(perfil?.marca).textos.negocio}`;
   const fecha = formatFechaBloq(cita.fecha);
   const hora = hora12simple(cita.horaInicio);
   return (
     `Hola ${cita.clienteNombre}, soy de *${local}*.\n\n` +
     `Necesito reagendar tu cita del ${fecha} a las ${hora}, ya que no voy a poder atender en ese horario.\n\n` +
-    `¿Qué día y hora te quedarían bien? Disculpá las molestias.`
+    `¿Qué día y hora te quedarían bien? Disculpa las molestias.`
   );
 }

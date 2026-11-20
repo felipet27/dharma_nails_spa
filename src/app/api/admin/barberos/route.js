@@ -60,12 +60,19 @@ export const POST = handler(async (req) => {
   if (!session || session.role !== ROLES.ADMIN) return fail("No autorizado", 403);
 
   const body = await req.json();
-  const { nombre, local, celular, ciudad, direccion, email, password } = body;
+  const { nombre, celular, email, password } = body;
 
   const marca = esMarcaValida(body.marca) ? body.marca : MARCA_DEFAULT;
-  const localFinal = local?.trim() || obtenerMarca(marca).nombre;
-  const ciudadFinal = ciudad?.trim() || BARBERIA_SEDE_DEFAULT.ciudad;
-  const direccionFinal = (typeof direccion === "string" && direccion.trim()) ? direccion.trim() : BARBERIA_SEDE_DEFAULT.direccion;
+
+  // La sede no se pide en el formulario: el especialista se crea en el local
+  // actual, copiando local/ciudad/dirección de otro especialista de la misma marca.
+  const sedeActual = await Barbero.findOne({ marca, local: { $ne: "" } })
+    .sort({ createdAt: 1 })
+    .select("local ciudad direccion")
+    .lean();
+  const localFinal = sedeActual?.local || BARBERIA_SEDE_DEFAULT.local || obtenerMarca(marca).nombre;
+  const ciudadFinal = sedeActual?.ciudad || BARBERIA_SEDE_DEFAULT.ciudad;
+  const direccionFinal = sedeActual?.direccion || BARBERIA_SEDE_DEFAULT.direccion;
 
   if (!nombre?.trim() || !celular?.trim() || !email?.trim()) {
     return fail("Nombre, celular y correo son obligatorios", 400);

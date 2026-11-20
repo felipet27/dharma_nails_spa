@@ -30,7 +30,7 @@ export const GET = handler(async (req, { params }) => {
     .select("horaInicio horaFin")
     .lean();
 
-  const duracionCita = Number(plan.duracion) || barbero.horario?.duracionTurnoMin || 30;
+  const duracionCita = Number(plan.duracion) || 30;
 
   const slots = calcularSlots({
     barbero,

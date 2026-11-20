@@ -29,7 +29,7 @@ export const POST = handler(async () => {
   const res = await enviarPush(target, {
     title: `${marca.nombre} ${marca.textos.emoji}`,
     body: "¡Prueba exitosa! Las notificaciones están activas en este dispositivo.",
-    url: session.role === ROLES.BARBERO ? "/barbero/panel" : "/admin/panel",
+    url: session.role === ROLES.BARBERO ? "/especialista/panel" : "/admin/panel",
     tag: `test-${Date.now()}`,
   });
 

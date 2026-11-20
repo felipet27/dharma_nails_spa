@@ -8,26 +8,23 @@ import EstadoBadge from "@/components/EstadoBadge";
 import EditorPlanes from "@/components/admin/EditorPlanes";
 import EditorInfoBarbero from "@/components/admin/EditorInfoBarbero";
 import CrearBarberoModal from "@/components/admin/CrearBarberoModal";
-import { MARCA_DEFAULT, obtenerMarca } from "@/lib/brands";
-import { useBrand } from "@/components/BrandProvider";
 import ControlSuscripciones from "@/components/admin/ControlSuscripciones";
 import ActivarNotificaciones from "@/components/ActivarNotificaciones";
 import { useDialog } from "@/components/DialogProvider";
 
 const FILTROS = [
   { key: "pendiente", label: "Pendientes" },
-  { key: "activo", label: "Activos" },
-  { key: "inactivo", label: "Inactivos" },
-  { key: "rechazado", label: "Rechazados" },
+  { key: "activo", label: "Activas" },
+  { key: "inactivo", label: "Inactivas" },
+  { key: "rechazado", label: "Rechazadas" },
   { key: "", label: "Todos" },
 ];
 
 export default function AdminPanelPage() {
   const router = useRouter();
-  const { id: marcaActiva } = useBrand();
   const { confirmar } = useDialog();
   const [sesion, setSesion] = useState(undefined);
-  const [filtro, setFiltro] = useState("pendiente");
+  const [filtro, setFiltro] = useState("activo");
   const [barberos, setBarberos] = useState([]);
   const [todosBarberos, setTodosBarberos] = useState([]);
   const [creandoBarbero, setCreandoBarbero] = useState(false); // CrearBarberoModal
@@ -101,12 +98,12 @@ export default function AdminPanelPage() {
 
   const CONFIRMAR = {
     rechazar: {
-      titulo: "Rechazar negocio",
-      mensaje: "¿Rechazar la solicitud de este negocio?",
+      titulo: "Rechazar especialista",
+      mensaje: "¿Rechazar a esta especialista?",
       confirmarLabel: "Rechazar",
     },
     desactivar: {
-      titulo: "Desactivar negocio",
+      titulo: "Desactivar especialista",
       mensaje: "No podrá iniciar sesión ni recibir nuevas citas.",
       confirmarLabel: "Desactivar",
     },
@@ -143,11 +140,11 @@ export default function AdminPanelPage() {
     router.replace("/");
   }
 
-  // Sede precargada al crear un negocio: la del primer negocio de la marca
-  // activa, para no proponerle a un groomer los datos de una barbería.
-  const negocioMismaMarca = barberos.find((b) => (b.marca || MARCA_DEFAULT) === marcaActiva && b.local);
-  const sedeDeLaMarca = negocioMismaMarca
-    ? { local: negocioMismaMarca.local, ciudad: negocioMismaMarca.ciudad, direccion: negocioMismaMarca.direccion }
+  // Datos del spa (local, ciudad, dirección) que se muestran al crear una
+  // especialista: los de cualquier especialista ya registrada.
+  const conSede = todosBarberos.find((b) => b.local);
+  const sedeDelSpa = conSede
+    ? { local: conSede.local, ciudad: conSede.ciudad, direccion: conSede.direccion }
     : undefined;
 
   if (sesion === undefined) return <div className="p-10 text-center text-pizarra">Cargando…</div>;
@@ -155,21 +152,21 @@ export default function AdminPanelPage() {
 
   return (
     <div className="min-h-screen">
-      <Header showBrandSwitcher>
+      <Header>
         <button onClick={logout} className="btn-outline border-white text-white hover:bg-white hover:text-tinta text-sm py-1.5">Salir</button>
       </Header>
       <main className="mx-auto max-w-5xl px-4 py-6">
         <h1 className="font-display text-3xl">Panel de administración</h1>
 
         <div className="mt-4">
-          <ActivarNotificaciones descripcion="Recibí un aviso apenas alguien te contacte desde la web, aunque tengas la app cerrada." />
+          <ActivarNotificaciones descripcion="Recibe un aviso apenas alguien te contacte desde la web, aunque tengas la app cerrada." />
         </div>
 
         {/* Navegación de vistas */}
         <div className="mt-4 flex gap-2">
           <button onClick={() => setVista("barberos")}
             className={`px-4 py-2 rounded-lg text-sm font-semibold ${vista === "barberos" ? "bg-tinta text-white" : "border"}`}>
-            Negocios
+            Especialistas
           </button>
           <button onClick={() => { setVista("solicitudes"); cargarSolicitudes(); }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2 ${vista === "solicitudes" ? "bg-tinta text-white" : "border"}`}>
@@ -208,24 +205,19 @@ export default function AdminPanelPage() {
             className="btn-primary py-1.5 px-3.5 text-sm whitespace-nowrap shadow-sm ml-auto flex items-center gap-1.5"
           >
             <span className="text-base leading-none font-bold">+</span>
-            <span>Nuevo negocio</span>
+            <span>Nueva especialista</span>
           </button>
         </div>
 
         <div className="mt-6 space-y-3">
-          {barberos.length === 0 && <div className="card p-8 text-center text-pizarra">Sin negocios en esta categoría.</div>}
+          {barberos.length === 0 && <div className="card p-8 text-center text-pizarra">Sin especialistas en esta categoría.</div>}
           {barberos.map((b) => (
             <div key={b.id} className="card p-4">
               <div className="flex justify-between items-start gap-2 flex-wrap">
                 <div>
                   <h3 className="font-display text-lg flex items-center gap-2 flex-wrap">
-                    {b.local}
-                    <span className="badge bg-tinta text-hueso font-body tracking-normal">
-                      <span style={{ color: obtenerMarca(b.marca).colores.brandOnDark }}>Citas</span>
-                      {obtenerMarca(b.marca).nicho}
-                    </span>
+                    {b.nombre}
                   </h3>
-                  <p className="text-sm text-pizarra">{b.nombre} · {b.ciudad}</p>
                   <p className="text-sm text-pizarra mt-0.5">📱 {b.celular} · {b.email}</p>
                   {b.direccion && <p className="text-xs text-pizarra">{b.direccion}</p>}
                   <p className="text-xs text-pizarra mt-1">
@@ -251,7 +243,7 @@ export default function AdminPanelPage() {
                 )}
                 <button className="btn-outline text-sm py-1.5" onClick={() => setEditandoInfo(b)}>Editar info</button>
                 {["activo", "inactivo"].includes(b.estado) && (
-                  <button className="btn-dark text-sm py-1.5" onClick={() => setEditando(b)}>Configurar planes</button>
+                  <button className="btn-dark text-sm py-1.5" onClick={() => setEditando(b)}>Configurar servicios</button>
                 )}
                 <button
                   className="text-sm py-1.5 px-3 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-semibold ml-auto"
@@ -317,7 +309,7 @@ export default function AdminPanelPage() {
 
       {creandoBarbero && (
         <CrearBarberoModal
-          defaultBarberia={sedeDeLaMarca}
+          defaultBarberia={sedeDelSpa}
           onClose={() => setCreandoBarbero(false)}
           onCreado={(nuevoBarbero, abrirPlanes) => {
             setCreandoBarbero(false);
@@ -348,9 +340,9 @@ export default function AdminPanelPage() {
       {eliminando && (
         <div className="fixed inset-0 bg-black/60 grid place-items-center p-4 z-50">
           <div className="card p-6 w-full max-w-md space-y-4">
-            <h2 className="font-display text-2xl text-red-600">Eliminar negocio</h2>
+            <h2 className="font-display text-2xl text-red-600">Eliminar especialista</h2>
             <p className="text-sm text-pizarra">
-              Vas a eliminar de forma <b>permanente</b> a <b>{eliminando.nombre}</b> ({eliminando.local}).
+              Vas a eliminar de forma <b>permanente</b> a <b>{eliminando.nombre}</b>.
             </p>
             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
               Se borrarán también su acceso (login) y{" "}

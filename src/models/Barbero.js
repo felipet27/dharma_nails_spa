@@ -8,7 +8,7 @@ import { BRANDS, MARCA_DEFAULT } from "@/lib/brands";
 
 const PlanSchema = new mongoose.Schema(
   {
-    key: { type: String, required: true }, // bronce | plata | oro
+    key: { type: String, required: true }, // clave interna única del servicio
     nombre: String,
     servicios: [String],
     precio: Number,
@@ -16,6 +16,21 @@ const PlanSchema = new mongoose.Schema(
     anticipo: Number, // % (0 = sin anticipo)
     metodosPago: [String],
     activo: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+// Horario semanal: un día con sus tramos de trabajo. El hueco entre dos tramos
+// es una pausa (ver semanaDeHorario en lib/disponibilidad).
+const TramoSchema = new mongoose.Schema(
+  { ini: String, fin: String }, // 'HH:mm'
+  { _id: false }
+);
+const DiaHorarioSchema = new mongoose.Schema(
+  {
+    dia: { type: Number, min: 0, max: 6 }, // 0 = domingo
+    activo: { type: Boolean, default: false },
+    tramos: { type: [TramoSchema], default: [] },
   },
   { _id: false }
 );
@@ -35,7 +50,7 @@ const BarberoSchema = new mongoose.Schema(
     nombre: { type: String, required: true },
     local: { type: String, required: true },
     celular: { type: String, required: true },
-    ciudad: { type: String, required: true },
+    ciudad: { type: String, default: "" }, // se hereda de la sede; puede estar vacía
     direccion: { type: String, default: "" },
     foto: { type: String, default: "" }, // URL pública o base64
     redes: {
@@ -67,10 +82,16 @@ const BarberoSchema = new mongoose.Schema(
       horaInicio: { type: String, default: HORARIO_DEFAULT.horaInicio },
       horaFin: { type: String, default: HORARIO_DEFAULT.horaFin },
       diasLaborales: { type: [Number], default: HORARIO_DEFAULT.diasLaborales },
+      // Horario por día con sus pausas. Vacío = se usa el formato anterior
+      // (horaInicio/horaFin/diasLaborales/almuerzo), que se mantiene
+      // sincronizado como resumen.
+      semana: { type: [DiaHorarioSchema], default: [] },
+      // Intervalo de inicio: cada cuántos minutos se ofrece una hora para
+      // empezar una cita (el nombre se conserva por compatibilidad).
       duracionTurnoMin: {
         type: Number,
         default: HORARIO_DEFAULT.duracionTurnoMin || 30,
-        min: 15,
+        min: 5,
         max: 120,
       },
       // Hora de almuerzo: se aplica a todos los días laborales y no queda
@@ -96,5 +117,11 @@ const BarberoSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// En desarrollo, la recarga en caliente conserva el modelo viejo en memoria y
+// los cambios de esquema no se aplican: se vuelve a registrar con el esquema actual.
+if (process.env.NODE_ENV !== "production" && mongoose.models.Barbero) {
+  mongoose.deleteModel("Barbero");
+}
 
 export default mongoose.models.Barbero || mongoose.model("Barbero", BarberoSchema);

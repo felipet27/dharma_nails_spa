@@ -106,7 +106,7 @@ export const POST = handler(async (req) => {
     .select("horaInicio horaFin")
     .lean();
 
-  const duracionCita = Number(plan.duracion) || barbero.horario?.duracionTurnoMin || 30;
+  const duracionCita = Number(plan.duracion) || 30;
 
   const slots = calcularSlots({ barbero, fecha, duracion: duracionCita, citas: citasDia });
   if (!slots.includes(horaInicio))
@@ -159,7 +159,7 @@ export const POST = handler(async (req) => {
     {
       title: "Nueva cita solicitada",
       body: `${cita.clienteNombre} · ${plan.nombre} · ${cita.fecha} a las ${formatearHora12(cita.horaInicio)}`,
-      url: "/barbero/panel",
+      url: "/especialista/panel",
       tag: `cita-${cita._id}`,
     }
   );

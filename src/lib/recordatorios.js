@@ -50,7 +50,7 @@ export async function recordarCitasSinConfirmar({ barberoId = null } = {}) {
         {
           title: "Cita sin confirmar",
           body: `${cita.clienteNombre} · ${plan} · hoy a las ${formatearHora12(cita.horaInicio)}. Empieza en unos ${MIN_ANTELACION_AVISO} min y sigue sin confirmar.`,
-          url: "/barbero/panel",
+          url: "/especialista/panel",
           tag: `recordatorio-${cita._id}`,
         }
       );

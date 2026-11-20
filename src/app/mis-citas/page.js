@@ -5,7 +5,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import EstadoBadge from "@/components/EstadoBadge";
 import ActivarRecordatoriosCliente from "@/components/ActivarRecordatoriosCliente";
-import { WhatsAppIcon, Tijeras } from "@/components/Icons";
+import { WhatsAppIcon } from "@/components/Icons";
 import { formatoCOP } from "@/lib/constants";
 import { fechaLocalHoy, formatearHora12 } from "@/lib/disponibilidad";
 import { useDialog } from "@/components/DialogProvider";
@@ -300,7 +300,7 @@ export default function MisCitasPage() {
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs text-pizarra">Servicio / Plan</p>
+                            <p className="text-xs text-pizarra">Servicio</p>
                             <p className="font-semibold text-tinta">
                               {c.planSnapshot?.nombre} · {formatoCOP(c.planSnapshot?.precio)}
                             </p>
@@ -330,7 +330,7 @@ export default function MisCitasPage() {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              <WhatsAppIcon className="w-4 h-4" /> Escribir al {t.profesional}
+                              <WhatsAppIcon className="w-4 h-4" /> Escribir a la {t.profesional}
                             </a>
                           )}
                         </div>

@@ -175,7 +175,7 @@ export default function ActivarNotificaciones({ descripcion }) {
 
   const texto =
     descripcion ||
-    "Recibí un aviso en este dispositivo cuando llegue algo nuevo, aunque tengas la app cerrada.";
+    "Recibe un aviso en este dispositivo cuando llegue algo nuevo, aunque tengas la app cerrada.";
 
   return (
     <div className="card p-4 bg-white/80 backdrop-blur-sm border border-black/5 shadow-sm rounded-xl">

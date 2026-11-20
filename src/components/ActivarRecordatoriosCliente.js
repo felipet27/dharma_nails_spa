@@ -207,7 +207,7 @@ export default function ActivarRecordatoriosCliente({ celular }) {
 
         {estado === "inactivo" && (
           <p className="text-xs text-pizarra mt-0.5 leading-relaxed">
-            Te avisamos el día de tu cita apenas abra la {t.negocio}, y cuando el {t.profesional} confirme o modifique tu turno.
+            Te avisamos el día de tu cita apenas abra la {t.negocio}, y cuando la {t.profesional} confirme o modifique tu turno.
           </p>
         )}
 

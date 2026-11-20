@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-// Rate limiting para frenar fuerza bruta de contraseñas, spam de registros y
+// Rate limiting para frenar fuerza bruta de contraseñas, spam de solicitudes y
 // enumeración de clientes por celular.
 //
 // Implementación en memoria (ventana deslizante por IP). Es suficiente para un
@@ -10,7 +10,6 @@ import { NextResponse } from "next/server";
 
 const LIMITES = [
   { patron: /^\/api\/auth\/login/, max: 8, ventanaMs: 60_000 },
-  { patron: /^\/api\/auth\/registro-barbero/, max: 5, ventanaMs: 60_000 },
   { patron: /^\/api\/clientes\/identificar/, max: 15, ventanaMs: 60_000 },
   { patron: /^\/api\/solicitudes/, max: 5, ventanaMs: 60_000 },
   { patron: /^\/api\/citas\/consulta/, max: 30, ventanaMs: 60_000 },
@@ -61,7 +60,6 @@ export function middleware(req) {
 export const config = {
   matcher: [
     "/api/auth/login",
-    "/api/auth/registro-barbero",
     "/api/clientes/identificar",
     "/api/solicitudes",
     "/api/citas/consulta",

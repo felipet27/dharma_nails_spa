@@ -132,3 +132,11 @@ h1, h2, h3, .font-display {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
 }
+
+/* En celulares angostos el ícono de reloj de los campos de hora le quita
+   espacio al "a. m./p. m."; al tocar el campo igual se abre el selector. */
+@media (max-width: 400px) {
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    display: none;
+  }
+}

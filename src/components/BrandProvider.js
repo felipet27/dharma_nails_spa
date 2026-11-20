@@ -16,8 +16,8 @@ const BrandContext = createContext(null);
 // Nombre de la página actual para el título de la pestaña ("Dharma Nails Spa — Mis citas").
 const PAGINAS = [
   ["/admin", "Administración"],
-  ["/barbero/panel", "Mi panel"],
-  ["/barbero", "Profesionales"],
+  ["/especialista/panel", "Mi panel"],
+  ["/especialista", "Especialistas"],
   ["/agendar", null],
   ["/mis-citas", "Mis citas"],
 ];
