@@ -140,3 +140,24 @@ h1, h2, h3, .font-display {
     display: none;
   }
 }
+
+/* Campos de hora y fecha: Safari (iPhone) y algunos Android les dan un ancho
+   mínimo propio y no se encogen dentro de su cuadro, así que se desbordan en
+   pantallas angostas. Se quita la apariencia nativa del contenedor (el
+   selector sigue abriéndose al tocar) y se fuerza a respetar el ancho. */
+input[type="time"],
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+/* Safari centra el valor y le pone alto propio: se alinea como los demás campos. */
+input[type="time"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+  min-height: 1.5em;
+}

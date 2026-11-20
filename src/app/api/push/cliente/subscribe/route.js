@@ -2,6 +2,7 @@ import { dbConnect } from "@/lib/db";
 import PushSubscription from "@/models/PushSubscription";
 import { ok, fail, handler } from "@/lib/api";
 import { normalizarCelular } from "@/lib/whatsapp";
+import { esTexto } from "@/lib/validaciones";
 
 // POST /api/push/cliente/subscribe
 // Registra (o actualiza) la suscripción push de un cliente. No exige sesión:
@@ -13,7 +14,7 @@ export const POST = handler(async (req) => {
 
   const cel = normalizarCelular(celular);
   if (!cel || cel.replace(/\D/g, "").length < 10) return fail("Celular inválido", 400);
-  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth)
+  if (!esTexto(subscription?.endpoint) || !esTexto(subscription?.keys?.p256dh, 500) || !esTexto(subscription?.keys?.auth, 500))
     return fail("Suscripción inválida", 400);
 
   // upsert por endpoint: si el navegador re-suscribe, actualizamos el dueño.

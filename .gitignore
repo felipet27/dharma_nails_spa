@@ -9,3 +9,20 @@ build
 .vercel
 .mongo-memory
 .review
+
+# Variables de entorno: nunca se suben (solo la plantilla .env.example)
+.env.*
+!.env.example
+
+# Claves y certificados
+*.pem
+*.key
+
+# Configuración local de herramientas
+.claude/settings.local.json
+.tmp-qa
+
+# Documentación interna (se mantiene solo en local)
+SEGURIDAD.md
+documentacion.md
+especificacion.md

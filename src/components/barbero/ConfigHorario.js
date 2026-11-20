@@ -321,9 +321,10 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
                             </button>
                           </div>
                         )}
-                        {/* Grid con columnas que pueden encogerse: en celulares de
-                            320 px las dos horas caben sin desbordar. */}
-                        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-2">
+                        {/* Desde 360 px: "entrada a salida" en una fila. En
+                            pantallas más angostas (iPhone SE) van una debajo de
+                            la otra para que la hora completa siempre se vea. */}
+                        <div className="grid grid-cols-1 min-[360px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-2">
                           <input
                             type="time"
                             className="input py-2 px-2 sm:px-3 min-w-0 w-full"
@@ -331,7 +332,7 @@ export default function ConfigHorario({ perfil, onGuardado, onIrACita }) {
                             onChange={(e) => setTramo(dia, i, "ini", e.target.value)}
                             aria-label={`${DIAS_SEMANA[dia]}: ${i === 0 ? "entrada" : "regreso de la pausa"}`}
                           />
-                          <span className="text-pizarra text-sm shrink-0">a</span>
+                          <span className="text-pizarra text-sm shrink-0 hidden min-[360px]:block">a</span>
                           <input
                             type="time"
                             className="input py-2 px-2 sm:px-3 min-w-0 w-full"

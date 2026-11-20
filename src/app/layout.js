@@ -35,7 +35,7 @@ export const metadata = {
   },
   icons: {
     icon: [{ url: MARCA_INICIAL.favicon, type: "image/png" }],
-    apple: MARCA_INICIAL.iconoApp,
+    apple: [{ url: MARCA_INICIAL.iconoApple, sizes: "180x180", type: "image/png" }],
   },
 };
 

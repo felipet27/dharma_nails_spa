@@ -33,3 +33,36 @@ export function validarComprobante(comprobante) {
 
   return { ok: true, valor: comprobante };
 }
+
+// ---------------------------------------------------------------------------
+// Validación de tipos de entrada.
+//
+// Los valores que llegan en el cuerpo JSON pueden ser objetos en vez de texto
+// (p. ej. {"$ne": null}). Si llegan así a un filtro de MongoDB funcionan como
+// operadores (inyección NoSQL). Toda entrada que vaya a una consulta debe
+// pasar antes por estas funciones.
+// ---------------------------------------------------------------------------
+
+export function esTexto(v, max = 2000) {
+  return typeof v === "string" && v.length > 0 && v.length <= max;
+}
+
+// 'YYYY-MM-DD' con valores de calendario razonables.
+export function esFecha(v) {
+  return typeof v === "string" && /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v);
+}
+
+// 'HH:mm' en 24 horas.
+export function esHora(v) {
+  return typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+}
+
+// Imagen en base64 (foto de perfil, QR de pago) con tamaño máximo en bytes reales.
+export function esImagenBase64(v, maxBytes = 3 * 1024 * 1024) {
+  if (v === "") return true;
+  if (typeof v !== "string") return false;
+  if (/^https:\/\/\S+$/i.test(v) && v.length <= 2000) return true; // URL pública
+  const m = /^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/=]+)$/.exec(v);
+  if (!m) return false;
+  return Math.floor((m[2].length * 3) / 4) <= maxBytes;
+}

@@ -8,7 +8,7 @@ import { calcularSlots, minAHhmm, hhmmAMin, fechaLocalHoy, formatearHora12, minu
 import { normalizarCelular, linkWhatsApp, mensajeNuevaCita } from "@/lib/whatsapp";
 import { ESTADO_CITA, ROLES } from "@/lib/constants";
 import { serializarCita } from "@/lib/serializers";
-import { validarComprobante } from "@/lib/validaciones";
+import { validarComprobante, esTexto, esFecha, esHora } from "@/lib/validaciones";
 import { enviarPush } from "@/lib/push";
 import {
   recordarCitasSinConfirmar,
@@ -71,8 +71,9 @@ export const POST = handler(async (req) => {
   const { barberoId, plan: planKey, fecha, horaInicio, metodoPago, comprobante } = body;
   let { clienteNombre, clienteCelular } = body;
 
-  if (!barberoId || !planKey || !fecha || !horaInicio)
+  if (!esTexto(barberoId, 64) || !esTexto(planKey, 64) || !esFecha(fecha) || !esHora(horaInicio))
     return fail("Faltan datos de la cita");
+  if (metodoPago != null && !esTexto(metodoPago, 30)) return fail("Método de pago inválido", 400);
   if (!clienteNombre || !clienteCelular)
     return fail("Nombre y celular del cliente son obligatorios");
 

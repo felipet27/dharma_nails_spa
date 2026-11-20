@@ -3,6 +3,7 @@ import PushSubscription from "@/models/PushSubscription";
 import { ok, fail, handler } from "@/lib/api";
 import { getSession } from "@/lib/auth";
 import { ROLES } from "@/lib/constants";
+import { esTexto } from "@/lib/validaciones";
 
 // Devuelve { ownerRole, ownerId } del usuario autenticado (barbero o admin),
 // o null si no es ninguno de los dos.
@@ -22,7 +23,7 @@ export const POST = handler(async (req) => {
   if (!dueño) return fail("No autorizado", 403);
 
   const { subscription, userAgent } = await req.json();
-  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth)
+  if (!esTexto(subscription?.endpoint) || !esTexto(subscription?.keys?.p256dh, 500) || !esTexto(subscription?.keys?.auth, 500))
     return fail("Suscripción inválida", 400);
 
   // upsert por endpoint: si el navegador re-suscribe, reasignamos el dueño.

@@ -11,6 +11,7 @@ import {
   fechaLocalHoy,
 } from "@/lib/disponibilidad";
 import { serializarCita } from "@/lib/serializers";
+import { esFecha, esHora, esImagenBase64 } from "@/lib/validaciones";
 import { MARCA_DEFAULT } from "@/lib/brands";
 
 function requireBarbero() {
@@ -58,6 +59,44 @@ export const PUT = handler(async (req) => {
   await dbConnect();
   const session = requireBarbero();
   const body = await req.json();
+
+  // Validación de tipos y formatos antes de tocar la base de datos.
+  if (body.diasBloqueados != null) {
+    if (!Array.isArray(body.diasBloqueados) || body.diasBloqueados.length > 400 || !body.diasBloqueados.every(esFecha))
+      return fail("Días bloqueados inválidos.", 400);
+  }
+  if (body.franjasBloqueadas != null) {
+    if (!Array.isArray(body.franjasBloqueadas) || body.franjasBloqueadas.length > 400) return fail("Ausencias inválidas.", 400);
+    for (const f of body.franjasBloqueadas) {
+      if (!f || !esFecha(f.fecha) || !esHora(f.horaInicio) || !esHora(f.horaFin) || f.horaFin <= f.horaInicio)
+        return fail("Revisa las horas de las ausencias.", 400);
+    }
+    body.franjasBloqueadas = body.franjasBloqueadas.map((f) => ({
+      fecha: f.fecha,
+      horaInicio: f.horaInicio,
+      horaFin: f.horaFin,
+      motivo: typeof f.motivo === "string" ? f.motivo.slice(0, 60) : "",
+    }));
+  }
+  if (body.foto != null && !esImagenBase64(body.foto)) return fail("La foto no es válida o pesa más de 3 MB.", 400);
+  if (body.datosPago?.qrImagen != null && !esImagenBase64(body.datosPago.qrImagen)) return fail("La imagen del QR no es válida o pesa más de 3 MB.", 400);
+  if (body.datosPago) {
+    const dp = {};
+    for (const k of ["nequi", "daviplata", "cuenta"]) if (body.datosPago[k] != null) dp[k] = String(body.datosPago[k]).slice(0, 120);
+    if (body.datosPago.qrImagen != null) dp.qrImagen = body.datosPago.qrImagen;
+    body.datosPago = dp;
+  }
+  if (body.redes) {
+    const r = {};
+    for (const k of ["instagram", "facebook", "tiktok"]) if (body.redes[k] != null) r[k] = String(body.redes[k]).slice(0, 200);
+    body.redes = r;
+  }
+  if (body.ventanaCancelacionHoras != null) {
+    const v = Number(body.ventanaCancelacionHoras);
+    if (!Number.isFinite(v) || v < 0 || v > 720) return fail("Horas de cancelación inválidas.", 400);
+    body.ventanaCancelacionHoras = v;
+  }
+
   const b = await Barbero.findById(session.barberoId);
   if (!b) return fail("Profesional no encontrado", 404);
 

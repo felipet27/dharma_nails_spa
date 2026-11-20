@@ -8,6 +8,7 @@ import { normalizarCelular, linkWhatsApp, mensajeConfirmacion } from "@/lib/what
 import { ESTADO_CITA, ROLES } from "@/lib/constants";
 import { serializarCita } from "@/lib/serializers";
 import { enviarPush } from "@/lib/push";
+import { esTexto, esFecha, esHora } from "@/lib/validaciones";
 
 // POST /api/citas/manual  -> el barbero crea una cita para un cliente presencial
 export const POST = handler(async (req) => {
@@ -19,7 +20,7 @@ export const POST = handler(async (req) => {
   const body = await req.json();
   const { plan: planKey, fecha, horaInicio, plano } = body;
   let { clienteNombre, clienteCelular } = body;
-  if (!planKey || !fecha || !horaInicio || !clienteNombre)
+  if (!esTexto(planKey, 64) || !esFecha(fecha) || !esHora(horaInicio) || !clienteNombre)
     return fail("Faltan datos de la cita");
 
   clienteNombre = String(clienteNombre).trim().slice(0, 80);

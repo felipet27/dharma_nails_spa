@@ -77,7 +77,7 @@ function aplicarEnDocumento(marca, pathname) {
   });
 
   document.querySelectorAll('link[rel="apple-touch-icon"]').forEach((link) => {
-    link.setAttribute("href", marca.iconoApp);
+    link.setAttribute("href", marca.iconoApple);
   });
   document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute("content", marca.nombre);
 

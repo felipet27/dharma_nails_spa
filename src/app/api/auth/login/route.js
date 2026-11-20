@@ -2,13 +2,14 @@ import { dbConnect } from "@/lib/db";
 import Usuario from "@/models/Usuario";
 import Barbero from "@/models/Barbero";
 import { ok, fail, handler } from "@/lib/api";
+import { esTexto } from "@/lib/validaciones";
 import { verifyPassword, signToken, setSessionCookie } from "@/lib/auth";
 import { ESTADO_BARBERO, ROLES } from "@/lib/constants";
 
 export const POST = handler(async (req) => {
   await dbConnect();
   const { email, password } = await req.json();
-  if (!email || !password) return fail("Email y contraseña son obligatorios");
+  if (!esTexto(email, 200) || !esTexto(password, 200)) return fail("Email y contraseña son obligatorios");
 
   const emailNorm = email.toLowerCase().trim();
   const usuario = await Usuario.findOne({ email: emailNorm });

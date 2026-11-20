@@ -14,6 +14,11 @@ export function handler(fn) {
     try {
       return await fn(req, ctx);
     } catch (e) {
+      // Datos mal formados del cliente (JSON roto, id inválido, tipo
+      // incorrecto): es un 400, no un error del servidor.
+      if (e instanceof SyntaxError || e?.name === "CastError" || e?.name === "ValidationError") {
+        return fail("Datos inválidos", 400);
+      }
       const status = e.status || 500;
       if (status === 500) {
         console.error(e);

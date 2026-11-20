@@ -4,6 +4,7 @@ import Cita from "@/models/Cita";
 import { ok, fail, handler } from "@/lib/api";
 import { calcularSlots } from "@/lib/disponibilidad";
 import { ESTADO_CITA } from "@/lib/constants";
+import { esFecha, esTexto } from "@/lib/validaciones";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export const GET = handler(async (req, { params }) => {
   const { searchParams } = new URL(req.url);
   const fecha = searchParams.get("fecha");
   const planKey = searchParams.get("plan");
-  if (!fecha || !planKey) return fail("Faltan parámetros fecha o plan");
+  if (!esFecha(fecha) || !esTexto(planKey, 64)) return fail("Faltan parámetros fecha o plan");
 
   const barbero = await Barbero.findById(params.id).lean();
   if (!barbero) return fail("Profesional no encontrado", 404);

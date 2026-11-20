@@ -46,7 +46,9 @@ export const BRANDS = {
       claro: "/brand/dharma-logo.png",
     },
     favicon: "/brand/dharma-icono.png",
-    iconoApp: "/brand/dharma-icono-perfil.png", // 1080x1080, app instalada
+    // Íconos de la app instalada, hechos con el logo principal completo.
+    iconoApp: "/brand/dharma-app.png", // 1024x1024 (avisos de instalación)
+    iconoApple: "/apple-touch-icon.png", // 180x180, pantalla de inicio del iPhone
     textos: {
       hero: "Tu momento de calma, sin filas ni esperas.",
       profesional: "especialista",
@@ -129,8 +131,11 @@ export function manifestDeMarca(id) {
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: m.iconoApp, sizes: "1080x1080", type: "image/png", purpose: "any" },
-      { src: m.iconoApp, sizes: "1080x1080", type: "image/png", purpose: "maskable" },
+      { src: m.iconoApp, sizes: "1024x1024", type: "image/png", purpose: "any" },
+      // Android recorta los íconos "maskable" (círculo, gota…): estos dejan el
+      // logo dentro de la zona segura para que no se corte.
+      { src: "/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

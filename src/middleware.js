@@ -14,6 +14,10 @@ const LIMITES = [
   { patron: /^\/api\/solicitudes/, max: 5, ventanaMs: 60_000 },
   { patron: /^\/api\/citas\/consulta/, max: 30, ventanaMs: 60_000 },
   { patron: /^\/api\/push\/cliente\/subscribe/, max: 10, ventanaMs: 60_000 },
+  { patron: /^\/api\/push\/cliente\/(test|unsubscribe)/, max: 10, ventanaMs: 60_000 },
+  { patron: /^\/api\/barbero\/cambiar-password/, max: 8, ventanaMs: 60_000 },
+  // Solo POST: evita que alguien llene la agenda con citas falsas.
+  { patron: /^\/api\/citas$/, max: 10, ventanaMs: 60_000, metodo: "POST" },
 ];
 
 // Map<clave, number[]>  -> timestamps de las peticiones recientes
@@ -27,7 +31,7 @@ function obtenerIp(req) {
 
 export function middleware(req) {
   const { pathname } = req.nextUrl;
-  const regla = LIMITES.find((l) => l.patron.test(pathname));
+  const regla = LIMITES.find((l) => l.patron.test(pathname) && (!l.metodo || l.metodo === req.method));
   if (!regla) return NextResponse.next();
 
   const ip = obtenerIp(req);
@@ -64,5 +68,9 @@ export const config = {
     "/api/solicitudes",
     "/api/citas/consulta",
     "/api/push/cliente/subscribe",
+    "/api/push/cliente/test",
+    "/api/push/cliente/unsubscribe",
+    "/api/barbero/cambiar-password",
+    "/api/citas",
   ],
 };

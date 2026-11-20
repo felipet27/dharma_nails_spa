@@ -68,8 +68,14 @@ export async function dbConnect() {
     // Auto-seed: SOLO al crear la conexión (una vez por proceso) y en
     // desarrollo/pruebas. Antes se corría en cada dbConnect() y requests
     // concurrentes sembraban barberos duplicados.
+    // Nunca siembra datos de ejemplo (con contraseñas conocidas) en una base
+    // real: solo con el MongoDB en memoria, salvo que se pida explícitamente
+    // con ALLOW_SEED=true (p. ej. una base de pruebas propia).
+    const usaBaseReal = Boolean(process.env.MONGODB_URI && process.env.MONGODB_URI.trim());
     const seedPermitido =
-      process.env.NODE_ENV !== "production" && process.env.ALLOW_SEED !== "false";
+      process.env.NODE_ENV !== "production" &&
+      process.env.ALLOW_SEED !== "false" &&
+      (!usaBaseReal || process.env.ALLOW_SEED === "true");
     if (seedPermitido && !seedPromise) {
       seedPromise = (async () => {
         const { seedIfEmpty } = await import("./seed");
